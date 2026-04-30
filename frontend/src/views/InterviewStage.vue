@@ -31,6 +31,11 @@
         <el-table-column prop="phone" label="手机号" width="130" />
         <el-table-column prop="email" label="邮箱" width="180" />
         <el-table-column prop="idCard" label="身份证号" width="180" />
+        <el-table-column label="当前阶段" width="120">
+          <template #default="{ row }">
+            {{ row.currentStage ? stageNames[row.currentStage] : '-' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="productLineName" label="产品线" width="120" />
         <el-table-column label="客户负责人" width="120" show-overflow-tooltip>
           <template #default="{ row }">
@@ -117,17 +122,12 @@
             {{ row.entryDate ? new Date(row.entryDate).toLocaleDateString() : '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="当前阶段" width="120">
-          <template #default="{ row }">
-            {{ row.currentStage ? stageNames[row.currentStage] : '-' }}
-          </template>
-        </el-table-column>
         <el-table-column label="操作" fixed="right" width="200">
           <template #default="{ row }">
             <el-button type="info" link size="small" @click="handleView(row)">
               查看
             </el-button>
-            <template v-if="isCurrentStage(row.currentStage)">
+            <template v-if="row.candidateCurrentStage !== 'entry' && isCurrentStage(row.currentStage) && row.currentStage !== 'entry'">
               <el-button type="primary" link size="small" @click="handleEdit(row)">
                 编辑
               </el-button>
@@ -611,7 +611,8 @@ const fetchEmployees = async () => {
             ...candidate,
             productLine: productLine,
             productLineName: productLine.name,
-            currentStage: productLine.through.interviewStage
+            currentStage: productLine.through.interviewStage,
+            candidateCurrentStage: candidate.currentStage
           })
         })
       }

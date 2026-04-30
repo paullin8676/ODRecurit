@@ -144,7 +144,33 @@ router.get('/employees', authenticate, async (req, res, next) => {
   try {
     const { name, currentStage, page = 1, pageSize = 20 } = req.query;
 
+    const entryProductLines = await CandidateProductLine.findAll({
+      where: {
+        interviewStage: 'entry'
+      },
+      include: [
+        {
+          model: Interview,
+          attributes: [
+            'qualificationInterviewDate', 'qualificationInterviewer', 'qualificationConclusion', 'qualificationPassed',
+            'techInterview1Date', 'techInterview1Interviewer', 'techInterview1Content', 'techInterview1Passed',
+            'techInterview2Date', 'techInterview2Interviewer', 'techInterview2Content', 'techInterview2Passed',
+            'managerInterviewDate', 'managerInterviewer', 'managerInterviewContent', 'managerInterviewPassed',
+            'approvalDate', 'approver', 'approvalRemark', 'approvalPassed',
+            'offerDate', 'offerApprover', 'offerRemark'
+          ]
+        },
+        {
+          model: ProductLine,
+          attributes: ['id', 'name', 'clientOwner']
+        }
+      ]
+    });
+
+    const candidateIds = [...new Set(entryProductLines.map(ep => ep.candidateId))];
+    
     let whereClause = {
+      id: candidateIds,
       currentStage: {
         [Op.in]: EMPLOYEE_STAGES
       }
@@ -178,26 +204,11 @@ router.get('/employees', authenticate, async (req, res, next) => {
 
     const candidatesWithProductLines = await Promise.all(
       candidates.map(async (candidate) => {
-        const productLines = await CandidateProductLine.findAll({
-          where: { candidateId: candidate.id },
-          include: [
-            {
-              model: Interview,
-              attributes: [
-                'qualificationInterviewDate', 'qualificationInterviewer', 'qualificationConclusion', 'qualificationPassed',
-                'techInterview1Date', 'techInterview1Interviewer', 'techInterview1Content', 'techInterview1Passed',
-                'techInterview2Date', 'techInterview2Interviewer', 'techInterview2Content', 'techInterview2Passed',
-                'managerInterviewDate', 'managerInterviewer', 'managerInterviewContent', 'managerInterviewPassed',
-                'approvalDate', 'approver', 'approvalRemark', 'approvalPassed',
-                'offerDate', 'offerApprover', 'offerRemark'
-              ]
-            }
-          ]
-        });
+        const productLines = entryProductLines.filter(ep => ep.candidateId === candidate.id);
 
         const productLineDetails = [];
         for (const pl of productLines) {
-          const productLine = await ProductLine.findByPk(pl.productLineId);
+          const productLine = pl.ProductLine;
           if (productLine) {
             const interview = pl.Interview || {};
             productLineDetails.push({
@@ -486,6 +497,7 @@ router.put('/:id', authenticate, async (req, res, next) => {
     if (leaveReason !== undefined) updateData.leaveReason = leaveReason;
     if (leaveRemark !== undefined) updateData.leaveRemark = leaveRemark;
 
+    // 只有当前端没有提供currentStage时，才根据leaveDate自动设置
     if (!updateData.currentStage) {
       if (leaveDate && !candidate.leaveDate) {
         updateData.currentStage = 'leave';
@@ -495,9 +507,6 @@ router.put('/:id', authenticate, async (req, res, next) => {
     }
 
     await candidate.update(updateData);
-
-    let maxStageIndex = -1;
-    let latestStage = candidate.currentStage;
 
     if (productLines && Array.isArray(productLines)) {
       const existingAssociations = await CandidateProductLine.findAll({
@@ -518,12 +527,6 @@ router.put('/:id', authenticate, async (req, res, next) => {
           await CandidateProductLine.update(candidateProductLineData, {
             where: { id: pl.id, candidateId: candidate.id }
           });
-          
-          const stageIndex = STAGES.indexOf(pl.interviewStage);
-          if (stageIndex > maxStageIndex) {
-            maxStageIndex = stageIndex;
-            latestStage = pl.interviewStage;
-          }
           
           const interviewData = {
             qualificationInterviewDate: pl.qualificationInterviewDate,
@@ -600,13 +603,6 @@ router.put('/:id', authenticate, async (req, res, next) => {
       }
     }
 
-    if (maxStageIndex >= 0 && latestStage !== candidate.currentStage) {
-      await candidate.update({ 
-        currentStage: latestStage,
-        lastOperatorId: req.user.id 
-      });
-    }
-
     await candidate.reload({
       include: [
         {
@@ -659,11 +655,6 @@ router.put('/:id/advance', authenticate, async (req, res, next) => {
         if (entryDate) updateData.entryDate = entryDate;
         if (entryRemark) updateData.entryRemark = entryRemark;
         await candidate.update(updateData);
-        
-        await CandidateProductLine.update(
-          { interviewStage: 'entry' },
-          { where: { candidateId: req.params.id } }
-        );
       } else {
         await candidate.update({ currentStage: nextStage, lastOperatorId: req.user.id });
       }

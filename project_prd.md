@@ -64,7 +64,9 @@
 - **管理阶段**: `entry`, `leave`
 - **功能**:
   - 员工列表查看
+  - 员工信息查看（对话框查看）
   - 员工信息编辑（行内编辑）
+  - 当前阶段可编辑（下拉选择入职/离职）
   - 离职处理（自动更新状态）
   - 入职日期、离职日期管理
 
@@ -369,6 +371,23 @@ User 1:N Candidate (lastOperator)
 
 - 填写离职日期后，自动将currentStage改为'leave'
 - 删除离职日期后，自动将currentStage改回'entry'
+- **优先级**: 如果前端明确提供了currentStage，则以提供的为准，不再根据leaveDate自动设置
+
+### 5.6 阶段字段关系说明
+
+系统中有两个阶段字段，分别位于不同表中：
+
+| 字段 | 表名 | 说明 |
+|------|------|------|
+| currentStage | Candidate | 候选人的全局当前阶段 |
+| interviewStage | CandidateProductLine | 候选人在某个具体产品线的面试阶段 |
+
+**更新规则**:
+1. 前端编辑员工信息时，修改的是 Candidate.currentStage
+2. 后端更新候选人信息时，优先使用前端提供的 currentStage
+3. 后端不再根据产品线的 interviewStage 自动覆盖 Candidate.currentStage
+4. 只有前端没有提供 currentStage 时，后端才会根据 leaveDate 自动判断
+5. 面试管理页面中，编辑按钮的显示逻辑依赖 candidate.currentStage（不为entry/leave时显示）
 
 ---
 
@@ -506,4 +525,5 @@ node src/app.js
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| 1.1 | 2026-04-30 | 更新内容：<br>1. 员工管理页面新增查看对话框功能<br>2. 员工管理页面当前阶段可编辑（下拉选择入职/离职）<br>3. 修复后端更新候选人阶段的逻辑，不再根据产品线interviewStage自动覆盖Candidate.currentStage<br>4. 明确currentStage和interviewStage的关系和更新规则 |
 | 1.0 | 2026-04 | 初始版本 |

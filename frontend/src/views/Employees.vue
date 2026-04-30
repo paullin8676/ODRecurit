@@ -80,8 +80,16 @@
           </template>
         </el-table-column>
         <el-table-column label="当前阶段" width="120">
-          <template #default="{ row }">
-            {{ row.currentStage ? stageNames[row.currentStage] : '-' }}
+          <template #default="{ row, $index }">
+            <template v-if="editingRowIndex === $index">
+              <el-select v-model="editingForm.currentStage" placeholder="请选择阶段" style="width: 100%" @keyup.enter="handleSave($index, row)" @keyup.esc="cancelEdit">
+                <el-option label="入职" value="entry" />
+                <el-option label="离职" value="leave" />
+              </el-select>
+            </template>
+            <template v-else>
+              {{ row.currentStage ? stageNames[row.currentStage] : '-' }}
+            </template>
           </template>
         </el-table-column>
         <el-table-column label="产品线" width="150" show-overflow-tooltip>
@@ -146,7 +154,7 @@
             {{ row.lastOperator?.realName || row.lastOperator?.username || '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" fixed="right" width="250">
+        <el-table-column label="操作" fixed="right" width="300">
           <template #default="{ row, $index }">
             <template v-if="editingRowIndex === $index">
               <el-button type="primary" size="small" @click="handleSave($index, row)">
@@ -157,6 +165,9 @@
               </el-button>
             </template>
             <template v-else>
+              <el-button type="info" link size="small" @click="handleView(row)">
+                查看
+              </el-button>
               <el-button type="primary" link size="small" @click="handleEdit(row, $index)">
                 编辑
               </el-button>
@@ -216,6 +227,52 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="viewDialogVisible"
+      title="查看员工信息"
+      width="600px"
+      @close="handleViewDialogClose"
+    >
+      <el-form :model="viewForm" label-width="100px" :disabled="true">
+        <el-form-item label="姓名">
+          <el-input :value="viewForm.name" disabled />
+        </el-form-item>
+        <el-form-item label="性别">
+          <el-input :value="viewForm.gender === 'male' ? '男' : viewForm.gender === 'female' ? '女' : '-'" disabled />
+        </el-form-item>
+        <el-form-item label="手机号">
+          <el-input :value="viewForm.phone" disabled />
+        </el-form-item>
+        <el-form-item label="邮箱">
+          <el-input :value="viewForm.email" disabled />
+        </el-form-item>
+        <el-form-item label="身份证号">
+          <el-input :value="viewForm.idCard" disabled />
+        </el-form-item>
+        <el-form-item label="当前阶段">
+          <el-input :value="stageNames[viewForm.currentStage] || '-'" disabled />
+        </el-form-item>
+        <el-form-item label="入职日期">
+          <el-input :value="viewForm.entryDate ? formatDate(viewForm.entryDate) : '-'" disabled />
+        </el-form-item>
+        <el-form-item label="离职日期">
+          <el-input :value="viewForm.leaveDate ? formatDate(viewForm.leaveDate) : '-'" disabled />
+        </el-form-item>
+        <el-form-item label="离职原因">
+          <el-input :value="viewForm.leaveReason || '-'" disabled />
+        </el-form-item>
+        <el-form-item label="离职备注">
+          <el-input :value="viewForm.leaveRemark || '-'" disabled />
+        </el-form-item>
+        <el-form-item label="最近操作人">
+          <el-input :value="viewForm.lastOperator || '-'" disabled />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="viewDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -269,6 +326,21 @@ const formRef = ref()
 const isEdit = ref(false)
 const currentId = ref(null)
 const editingRowIndex = ref(-1)
+const viewDialogVisible = ref(false)
+
+const viewForm = reactive({
+  name: '',
+  gender: '',
+  phone: '',
+  email: '',
+  idCard: '',
+  currentStage: '',
+  entryDate: null,
+  leaveDate: null,
+  leaveReason: '',
+  leaveRemark: '',
+  lastOperator: ''
+})
 
 const searchForm = reactive({
   name: '',
@@ -295,6 +367,7 @@ const editingForm = reactive({
   phone: '',
   email: '',
   idCard: '',
+  currentStage: '',
   entryDate: null,
   leaveDate: null,
   leaveReason: '',
@@ -388,6 +461,40 @@ const handleCreate = () => {
 
 const phoneInputRef = ref(null)
 
+const handleView = (row) => {
+  Object.assign(viewForm, {
+    name: row.name || '',
+    gender: row.gender || '',
+    phone: row.phone || '',
+    email: row.email || '',
+    idCard: row.idCard || '',
+    currentStage: row.currentStage || '',
+    entryDate: row.entryDate || null,
+    leaveDate: row.leaveDate || null,
+    leaveReason: row.leaveReason || '',
+    leaveRemark: row.leaveRemark || '',
+    lastOperator: row.lastOperator?.realName || row.lastOperator?.username || ''
+  })
+  viewDialogVisible.value = true
+}
+
+const handleViewDialogClose = () => {
+  viewDialogVisible.value = false
+  Object.assign(viewForm, {
+    name: '',
+    gender: '',
+    phone: '',
+    email: '',
+    idCard: '',
+    currentStage: '',
+    entryDate: null,
+    leaveDate: null,
+    leaveReason: '',
+    leaveRemark: '',
+    lastOperator: ''
+  })
+}
+
 const handleEdit = (row, index) => {
   editingRowIndex.value = index
   Object.assign(editingForm, {
@@ -396,6 +503,7 @@ const handleEdit = (row, index) => {
     phone: row.phone,
     email: row.email,
     idCard: row.idCard,
+    currentStage: row.currentStage || 'entry',
     entryDate: row.entryDate ? new Date(row.entryDate) : null,
     leaveDate: row.leaveDate ? new Date(row.leaveDate) : null,
     leaveReason: row.leaveReason || '',
@@ -478,15 +586,6 @@ const handleSave = async (index, row) => {
     const data = await candidateApi.getById(row.id)
     const employee = data.candidate
     
-    // Determine current stage based on leave date
-    let currentStage = row.currentStage
-    if (editingForm.leaveDate) {
-      currentStage = 'leave'
-    } else if (row.currentStage === 'leave' && !editingForm.leaveDate) {
-      // If leave date is removed and was previously in leave stage, change back to entry
-      currentStage = 'entry'
-    }
-    
     // Create update data with basic info and existing product lines
     const updateData = {
       name: editingForm.name,
@@ -494,7 +593,7 @@ const handleSave = async (index, row) => {
       phone: editingForm.phone,
       email: editingForm.email,
       idCard: editingForm.idCard,
-      currentStage: currentStage,
+      currentStage: editingForm.currentStage,
       entryDate: editingForm.entryDate,
       entryRemark: '',
       leaveDate: editingForm.leaveDate,
