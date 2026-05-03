@@ -7,3 +7,9 @@ dist/
 database.sqlite
 database.sqlite.bak
 db.sqlite3
+*.db
+recruit.db
+frontend/recruit.db
+backend/recruit.db
+.DS_Store
+check-tables.js

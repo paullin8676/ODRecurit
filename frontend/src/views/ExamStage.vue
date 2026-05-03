@@ -277,7 +277,7 @@ import { ElMessage } from 'element-plus'
 import { Search, Refresh } from '@element-plus/icons-vue'
 
 const stageNames = {
-  employee_entry: '候选录入',
+  candidate_entry: '候选录入',
   exam_declare: '机考申报',
   exam_complete: '机考完成',
   test_declare: '韧测申报',
@@ -289,6 +289,7 @@ const stageNames = {
   manager_interview: '主管面试',
   approval: '租用审批',
   offer: 'Offer',
+  pending_onboarding: '待入职',
   entry: '入职',
   leave: '离职'
 }
@@ -367,7 +368,7 @@ const fetchEmployees = async () => {
       // Get all stages that are in the configured stages or subsequent to them
       const allRelevantStages = new Set()
       const STAGES = [
-        'employee_entry',
+        'candidate_entry',
         'exam_declare',
         'exam_complete',
         'test_declare',
@@ -379,6 +380,7 @@ const fetchEmployees = async () => {
         'manager_interview',
         'approval',
         'offer',
+        'pending_onboarding',
         'entry',
         'leave'
       ]
@@ -405,7 +407,6 @@ const fetchEmployees = async () => {
     employees.value = transformedEmployees.slice(startIndex, endIndex)
     pagination.total = transformedEmployees.length
   } catch (error) {
-    console.error('Failed to fetch exams:', error)
   } finally {
     loading.value = false
   }
@@ -420,7 +421,6 @@ const fetchStageConfig = async () => {
       availableStages.value = Object.keys(stageNames)
     }
   } catch (error) {
-    console.error('Failed to fetch stage config:', error)
     availableStages.value = Object.keys(stageNames)
   }
 }
@@ -430,7 +430,6 @@ const fetchOptions = async () => {
     const papers = await examPaperApi.getAll()
     examPapers.value = papers.examPapers || []
   } catch (error) {
-    console.error('Failed to fetch options:', error)
   }
 }
 

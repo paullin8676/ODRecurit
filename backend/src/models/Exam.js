@@ -52,6 +52,10 @@ const Exam = sequelize.define('Exam', {
     type: DataTypes.BOOLEAN,
     allowNull: true
   }
+}, {
+  tableName: 'Exam',
+  timestamps: true,
+  underscored: true
 });
 
 module.exports = Exam;

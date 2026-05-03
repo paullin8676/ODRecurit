@@ -50,7 +50,6 @@ export const examPassLineApi = {
 
 export const candidateApi = {
   getAll: (params) => api.get('/candidates', { params }),
-  getEmployees: (params) => api.get('/candidates/employees', { params }),
   getById: (id) => api.get(`/candidates/${id}`),
   create: (data) => api.post('/candidates', data),
   update: (id, data) => api.put(`/candidates/${id}`, data),
@@ -62,20 +61,20 @@ export const candidateApi = {
   pushInterview: (id, data) => api.post(`/candidates/${id}/push-interview`, data)
 }
 
+export const employeeApi = {
+  getAll: (params) => api.get('/employees', { params }),
+  getById: (id) => api.get(`/employees/${id}`),
+  update: (id, data) => api.put(`/employees/${id}`, data),
+  advance: (id, data) => api.put(`/employees/${id}/advance`, data),
+  rollback: (id, data) => api.put(`/employees/${id}/rollback`, data),
+  delete: (id) => api.delete(`/employees/${id}`)
+}
+
 export const statisticsApi = {
   byConsultant: (params) => api.get('/statistics/by-consultant', { params }),
   byStage: (params) => api.get('/statistics/by-stage', { params }),
   processEfficiency: (params) => api.get('/statistics/process-efficiency', { params }),
   summary: () => api.get('/statistics/summary')
-}
-
-export const interviewStageApi = {
-  getByCandidate: (candidateId) => api.get(`/interview-stages/candidate/${candidateId}`),
-  getByCandidateAndProductLine: (candidateId, productLineId) => api.get(`/interview-stages/candidate/${candidateId}/productLine/${productLineId}`),
-  getById: (id) => api.get(`/interview-stages/${id}`),
-  create: (data) => api.post('/interview-stages', data),
-  update: (id, data) => api.put(`/interview-stages/${id}`, data),
-  delete: (id) => api.delete(`/interview-stages/${id}`)
 }
 
 export const examApi = {
@@ -100,7 +99,11 @@ export const interviewApi = {
   getById: (id) => api.get(`/interviews/${id}`),
   create: (data) => api.post('/interviews', data),
   update: (id, data) => api.put(`/interviews/${id}`, data),
-  delete: (id) => api.delete(`/interviews/${id}`)
+  delete: (id) => api.delete(`/interviews/${id}`),
+  // 新增的接口
+  createRound: (data) => api.post('/interviews/rounds', data),
+  updateRound: (id, data) => api.put(`/interviews/rounds/${id}`, data),
+  advance: (interviewId) => api.post(`/interviews/advance/${interviewId}`)
 }
 
 export const stageConfigApi = {

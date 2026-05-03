@@ -12,6 +12,11 @@ const StageConfig = (sequelize) => {
       type: DataTypes.JSON,
       allowNull: false,
       defaultValue: []
+    },
+    stageNames: {
+      type: DataTypes.JSON,
+      allowNull: false,
+      defaultValue: {}
     }
   }, {
     tableName: 'StageConfig',

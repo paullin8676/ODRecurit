@@ -32,6 +32,10 @@ const ExamStage = sequelize.define('ExamStage', {
     type: DataTypes.TEXT,
     allowNull: true
   }
+}, {
+  tableName: 'ExamStage',
+  timestamps: true,
+  underscored: true
 });
 
 module.exports = ExamStage;

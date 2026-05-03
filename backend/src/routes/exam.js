@@ -6,7 +6,7 @@ const { authenticate } = require('../middleware/auth');
 const router = express.Router();
 
 const STAGES = [
-  'employee_entry',
+  'candidate_entry',
   'exam_declare',
   'exam_complete',
   'test_declare',
@@ -18,6 +18,7 @@ const STAGES = [
   'manager_interview',
   'approval',
   'offer',
+  'pending_onboarding',
   'entry',
   'leave'
 ];

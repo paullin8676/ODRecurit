@@ -23,6 +23,10 @@ const ExamPassLine = sequelize.define('ExamPassLine', {
     type: DataTypes.BOOLEAN,
     defaultValue: true
   }
+}, {
+  tableName: 'ExamPassLine',
+  timestamps: true,
+  underscored: true
 });
 
 module.exports = ExamPassLine;

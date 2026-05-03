@@ -25,6 +25,10 @@ const ProductLine = sequelize.define('ProductLine', {
     type: DataTypes.BOOLEAN,
     defaultValue: true
   }
+}, {
+  tableName: 'ProductLine',
+  timestamps: true,
+  underscored: true
 });
 
 // Create many-to-many association with User
@@ -61,4 +65,4 @@ User.belongsToMany(ProductLine, {
   otherKey: 'productLineId'
 });
 
-module.exports = ProductLine;
+module.exports = { ProductLine, ProductLineUser };

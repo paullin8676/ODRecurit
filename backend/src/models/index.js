@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs');
 const sequelize = require('../config/database');
 const User = require('./User');
-const ProductLine = require('./ProductLine');
+const { ProductLine, ProductLineUser } = require('./ProductLine');
 const ExamPaper = require('./ExamPaper');
 const TestType = require('./TestType');
 const ExamPassLine = require('./ExamPassLine');
@@ -10,8 +10,9 @@ const CandidateProductLine = require('./CandidateProductLine');
 const Exam = require('./Exam');
 const Test = require('./Test');
 const Interview = require('./Interview');
+const InterviewRound = require('./InterviewRound');
 const ExamStage = require('./ExamStage');
-const InterviewStage = require('./InterviewStage');
+const Employee = require('./Employee');
 const StageConfig = require('./StageConfig')(sequelize);
 
 User.hasMany(User, { as: 'subordinates', foreignKey: 'managerId' });
@@ -19,7 +20,24 @@ User.belongsTo(User, { as: 'manager', foreignKey: 'managerId' });
 
 // ProductLine and User many-to-many association (already defined in ProductLine model)
 
-// Candidate and ProductLine many-to-many association (defined in CandidateProductLine model)
+// Candidate and ProductLine many-to-many association
+Candidate.belongsToMany(ProductLine, {
+  through: CandidateProductLine,
+  as: 'productLines',
+  foreignKey: 'candidateId',
+  otherKey: 'productLineId'
+});
+
+ProductLine.belongsToMany(Candidate, {
+  through: CandidateProductLine,
+  as: 'candidates',
+  foreignKey: 'productLineId',
+  otherKey: 'candidateId'
+});
+
+// CandidateProductLine additional associations
+CandidateProductLine.belongsTo(Candidate, { foreignKey: 'candidateId' });
+CandidateProductLine.belongsTo(ProductLine, { foreignKey: 'productLineId' });
 
 ExamPaper.hasMany(ExamPassLine, { foreignKey: 'examPaperId' });
 ExamPassLine.belongsTo(ExamPaper, { foreignKey: 'examPaperId' });
@@ -27,9 +45,6 @@ ExamPassLine.belongsTo(ExamPaper, { foreignKey: 'examPaperId' });
 // Candidate associations
 Candidate.hasMany(ExamStage, { foreignKey: 'candidateId' });
 ExamStage.belongsTo(Candidate, { foreignKey: 'candidateId' });
-
-Candidate.hasMany(InterviewStage, { foreignKey: 'candidateId' });
-InterviewStage.belongsTo(Candidate, { foreignKey: 'candidateId' });
 
 // New associations for Exam, Test, Interview models
 Candidate.hasOne(Exam, { foreignKey: 'candidateId' });
@@ -41,6 +56,10 @@ Test.belongsTo(Candidate, { foreignKey: 'candidateId' });
 // CandidateProductLine association with Interview
 CandidateProductLine.hasOne(Interview, { foreignKey: 'candidateProductLineId' });
 Interview.belongsTo(CandidateProductLine, { foreignKey: 'candidateProductLineId', as: 'candidateProductLine' });
+
+// Interview and InterviewRound associations
+Interview.hasMany(InterviewRound, { foreignKey: 'interviewId', as: 'rounds' });
+InterviewRound.belongsTo(Interview, { foreignKey: 'interviewId', as: 'interview' });
 
 // ExamPaper association with Exam
 ExamPaper.hasMany(Exam, { foreignKey: 'examPaperId' });
@@ -54,17 +73,21 @@ Test.belongsTo(TestType, { foreignKey: 'testTypeId' });
 Candidate.belongsTo(User, { foreignKey: 'lastOperatorId', as: 'lastOperator' });
 User.hasMany(Candidate, { foreignKey: 'lastOperatorId', as: 'operatedCandidates' });
 
+// Employee and User association (last operator)
+Employee.belongsTo(User, { foreignKey: 'lastOperatorId', as: 'lastOperator' });
+User.hasMany(Employee, { foreignKey: 'lastOperatorId', as: 'operatedEmployees' });
+
+// Employee and ProductLine association
+Employee.belongsTo(ProductLine, { foreignKey: 'productLineId', as: 'productLine' });
+ProductLine.hasMany(Employee, { foreignKey: 'productLineId' });
+
+// Candidate to Employee association (when candidate enters employee management)
+Candidate.hasMany(Employee, { foreignKey: 'candidateId' });
+Employee.belongsTo(Candidate, { foreignKey: 'candidateId' });
+
 // ExamPaper association with ExamStage
 // ExamPaper.hasMany(ExamStage, { foreignKey: 'examPaperId' });
 // ExamStage.belongsTo(ExamPaper, { foreignKey: 'examPaperId' });
-
-// User association with InterviewStage (as interviewer)
-User.hasMany(InterviewStage, { foreignKey: 'interviewerId', as: 'interviews' });
-InterviewStage.belongsTo(User, { foreignKey: 'interviewerId', as: 'interviewer' });
-
-// ProductLine association with InterviewStage
-ProductLine.hasMany(InterviewStage, { foreignKey: 'productLineId', as: 'interviewStages' });
-InterviewStage.belongsTo(ProductLine, { foreignKey: 'productLineId', as: 'productLine' });
 
 const initDatabase = async () => {
   await sequelize.sync({ force: false, alter: false });
@@ -161,23 +184,49 @@ const initDatabase = async () => {
     const stageConfigs = [
       {
         module: 'candidate_entry',
-        stages: ['employee_entry']
+        stages: ['candidate_entry'],
+        stageNames: {
+          candidate_entry: '候选录入'
+        }
       },
       {
         module: 'exam_management',
-        stages: ['exam_declare', 'exam_complete']
+        stages: ['exam_declare', 'exam_complete'],
+        stageNames: {
+          exam_declare: '机考申报',
+          exam_complete: '机考完成'
+        }
       },
       {
         module: 'test_management',
-        stages: ['test_declare', 'test_complete']
+        stages: ['test_declare', 'test_complete'],
+        stageNames: {
+          test_declare: '韧测申报',
+          test_complete: '韧测完成'
+        }
       },
       {
         module: 'interview_management',
-        stages: ['recommend_interview', 'qualification_interview', 'tech_interview_1', 'tech_interview_2', 'manager_interview', 'approval', 'offer']
+        stages: ['recommend_interview', 'qualification_interview', 'tech_interview_1', 'tech_interview_2', 'manager_interview', 'approval', 'offer', 'pending_onboarding'],
+        stageNames: {
+          recommend_interview: '推荐面试',
+          qualification_interview: '资面安排',
+          tech_interview_1: '技术面试(一)',
+          tech_interview_2: '技术面试(二)',
+          manager_interview: '主管面试',
+          approval: '租用审批',
+          offer: 'Offer',
+          pending_onboarding: '待入职'
+        }
       },
       {
         module: 'employee_management',
-        stages: ['entry', 'leave']
+        stages: ['pending_onboarding', 'entry', 'leave'],
+        stageNames: {
+          pending_onboarding: '待入职',
+          entry: '入职',
+          leave: '离职'
+        }
       }
     ];
 
@@ -194,6 +243,7 @@ module.exports = {
   sequelize,
   User,
   ProductLine,
+  ProductLineUser,
   ExamPaper,
   TestType,
   ExamPassLine,
@@ -202,8 +252,9 @@ module.exports = {
   Exam,
   Test,
   Interview,
+  InterviewRound,
   ExamStage,
-  InterviewStage,
+  Employee,
   StageConfig,
   initDatabase
 };

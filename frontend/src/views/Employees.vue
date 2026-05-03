@@ -1,11 +1,7 @@
 <template>
   <div class="page-container">
     <div class="page-header">
-      <h2 class="page-title">员工列表</h2>
-      <el-button type="primary" @click="handleCreate">
-        <el-icon><Plus /></el-icon>
-        新增员工
-      </el-button>
+      <h2 class="page-title">员工管理</h2>
     </div>
 
     <div class="card-container">
@@ -27,76 +23,40 @@
 
       <el-table :data="employees" v-loading="loading" stripe>
         <el-table-column prop="name" label="姓名" width="100">
-          <template #default="{ row, $index }">
-            <template v-if="editingRowIndex === $index">
-              <el-input v-model="editingForm.name" placeholder="请输入姓名" disabled />
-            </template>
-            <template v-else>
-              {{ row.name }}
-            </template>
+          <template #default="{ row }">
+            {{ row.name }}
           </template>
         </el-table-column>
         <el-table-column prop="gender" label="性别" width="80">
-          <template #default="{ row, $index }">
-            <template v-if="editingRowIndex === $index">
-              <el-select v-model="editingForm.gender" placeholder="请选择性别" style="width: 100%" @keyup.enter="handleSave($index, row)" @keyup.esc="cancelEdit">
-                <el-option label="男" value="male" />
-                <el-option label="女" value="female" />
-              </el-select>
-            </template>
-            <template v-else>
-              {{ row.gender === 'male' ? '男' : row.gender === 'female' ? '女' : '-' }}
-            </template>
+          <template #default="{ row }">
+            {{ row.gender === 'male' ? '男' : row.gender === 'female' ? '女' : '-' }}
           </template>
         </el-table-column>
         <el-table-column prop="phone" label="手机号" width="130">
-          <template #default="{ row, $index }">
-            <template v-if="editingRowIndex === $index">
-              <el-input v-model="editingForm.phone" placeholder="请输入手机号" @keyup.enter="handleSave($index, row)" @keyup.esc="cancelEdit" :ref="editingRowIndex === $index ? 'phoneInputRef' : null" />
-            </template>
-            <template v-else>
-              {{ row.phone || '-' }}
-            </template>
+          <template #default="{ row }">
+            {{ row.phone || '-' }}
           </template>
         </el-table-column>
         <el-table-column prop="email" label="邮箱" width="180">
-          <template #default="{ row, $index }">
-            <template v-if="editingRowIndex === $index">
-              <el-input v-model="editingForm.email" placeholder="请输入邮箱" @keyup.enter="handleSave($index, row)" @keyup.esc="cancelEdit" />
-            </template>
-            <template v-else>
-              {{ row.email || '-' }}
-            </template>
+          <template #default="{ row }">
+            {{ row.email || '-' }}
           </template>
         </el-table-column>
         <el-table-column prop="idCard" label="身份证号" width="180">
-          <template #default="{ row, $index }">
-            <template v-if="editingRowIndex === $index">
-              <el-input v-model="editingForm.idCard" placeholder="请输入身份证号" @keyup.enter="handleSave($index, row)" @keyup.esc="cancelEdit" />
-            </template>
-            <template v-else>
-              {{ row.idCard || '-' }}
-            </template>
+          <template #default="{ row }">
+            {{ row.idCard || '-' }}
           </template>
         </el-table-column>
         <el-table-column label="当前阶段" width="120">
-          <template #default="{ row, $index }">
-            <template v-if="editingRowIndex === $index">
-              <el-select v-model="editingForm.currentStage" placeholder="请选择阶段" style="width: 100%" @keyup.enter="handleSave($index, row)" @keyup.esc="cancelEdit">
-                <el-option label="入职" value="entry" />
-                <el-option label="离职" value="leave" />
-              </el-select>
-            </template>
-            <template v-else>
-              {{ row.currentStage ? stageNames[row.currentStage] : '-' }}
-            </template>
+          <template #default="{ row }">
+            {{ row.currentStage ? filteredStageNames[row.currentStage] : '-' }}
           </template>
         </el-table-column>
         <el-table-column label="产品线" width="150" show-overflow-tooltip>
           <template #default="{ row }">
-            <template v-if="row.productLines && row.productLines.length > 0">
-              <el-tag v-for="pl in row.productLines" :key="pl.id" type="info" class="product-line-tag">
-                {{ pl.name }}
+            <template v-if="row.productLine && row.productLine.name">
+              <el-tag type="info" class="product-line-tag">
+                {{ row.productLine.name }}
               </el-tag>
             </template>
             <template v-else>
@@ -110,43 +70,23 @@
           </template>
         </el-table-column>
         <el-table-column label="入职日期" width="120">
-          <template #default="{ row, $index }">
-            <template v-if="editingRowIndex === $index">
-              <el-date-picker v-model="editingForm.entryDate" type="date" style="width: 100%" placeholder="入职日期" @keyup.enter="handleSave($index, row)" @keyup.esc="cancelEdit" />
-            </template>
-            <template v-else>
-              {{ formatDate(row.entryDate) }}
-            </template>
+          <template #default="{ row }">
+            {{ formatDate(row.entryDate) }}
           </template>
         </el-table-column>
         <el-table-column label="离职日期" width="120">
-          <template #default="{ row, $index }">
-            <template v-if="editingRowIndex === $index">
-              <el-date-picker v-model="editingForm.leaveDate" type="date" style="width: 100%" placeholder="离职日期" @change="handleLeaveDateChange" @keyup.enter="handleSave($index, row)" @keyup.esc="cancelEdit" />
-            </template>
-            <template v-else>
-              {{ formatDate(row.leaveDate) }}
-            </template>
+          <template #default="{ row }">
+            {{ formatDate(row.leaveDate) }}
           </template>
         </el-table-column>
-        <el-table-column label="离职原因" width="120" show-overflow-tooltip>
-          <template #default="{ row, $index }">
-            <template v-if="editingRowIndex === $index">
-              <el-input v-model="editingForm.leaveReason" placeholder="离职原因" @keyup.enter="handleSave($index, row)" @keyup.esc="cancelEdit" />
-            </template>
-            <template v-else>
-              {{ row.leaveReason || '-' }}
-            </template>
+        <el-table-column label="离职类型" width="120" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.leaveType || '-' }}
           </template>
         </el-table-column>
         <el-table-column label="离职备注" width="150" show-overflow-tooltip>
-          <template #default="{ row, $index }">
-            <template v-if="editingRowIndex === $index">
-              <el-input v-model="editingForm.leaveRemark" placeholder="离职备注" @keyup.enter="handleSave($index, row)" @keyup.esc="cancelEdit" />
-            </template>
-            <template v-else>
-              {{ row.leaveRemark || '-' }}
-            </template>
+          <template #default="{ row }">
+            {{ row.leaveRemark || '-' }}
           </template>
         </el-table-column>
         <el-table-column label="最近操作人" width="120">
@@ -154,30 +94,14 @@
             {{ row.lastOperator?.realName || row.lastOperator?.username || '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" fixed="right" width="300">
-          <template #default="{ row, $index }">
-            <template v-if="editingRowIndex === $index">
-              <el-button type="primary" size="small" @click="handleSave($index, row)">
-                保存
-              </el-button>
-              <el-button size="small" @click="cancelEdit">
-                取消
-              </el-button>
-            </template>
-            <template v-else>
-              <el-button type="info" link size="small" @click="handleView(row)">
-                查看
-              </el-button>
-              <el-button type="primary" link size="small" @click="handleEdit(row, $index)">
-                编辑
-              </el-button>
-              <el-button v-if="canAdvance(row)" type="success" link size="small" @click="handleAdvance(row)">
-                推进
-              </el-button>
-              <el-button v-if="canRollback(row)" type="warning" link size="small" @click="handleRollback(row)">
-                回退
-              </el-button>
-            </template>
+        <el-table-column label="操作" fixed="right" width="120">
+          <template #default="{ row }">
+            <el-button type="info" link size="small" @click="handleView(row)">
+              查看
+            </el-button>
+            <el-button type="primary" link size="small" @click="handleEdit(row)">
+              编辑
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -202,7 +126,7 @@
     >
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
         <el-form-item label="姓名" prop="name">
-          <el-input v-model="form.name" placeholder="请输入姓名" />
+          <el-input v-model="form.name" placeholder="请输入姓名" disabled />
         </el-form-item>
         <el-form-item label="性别" prop="gender">
           <el-select v-model="form.gender" placeholder="请选择性别">
@@ -219,6 +143,33 @@
         <el-form-item label="身份证号" prop="idCard">
           <el-input v-model="form.idCard" placeholder="请输入身份证号" />
         </el-form-item>
+        <el-form-item label="当前阶段" prop="currentStage">
+          <el-select v-model="form.currentStage" placeholder="请选择阶段" style="width: 100%">
+            <el-option
+              v-for="(name, value) in filteredStageNames"
+              :key="value"
+              :label="name"
+              :value="value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="入职日期" prop="entryDate" v-if="form.currentStage === 'entry'">
+          <el-date-picker v-model="form.entryDate" type="date" style="width: 100%" placeholder="请选择入职日期" />
+        </el-form-item>
+        <template v-if="form.currentStage === 'leave'">
+          <el-form-item label="离职日期" prop="leaveDate">
+            <el-date-picker v-model="form.leaveDate" type="date" style="width: 100%" placeholder="请选择离职日期" />
+          </el-form-item>
+          <el-form-item label="离职类型" prop="leaveType">
+            <el-select v-model="form.leaveType" placeholder="请选择离职类型" style="width: 100%">
+              <el-option label="主动离职" value="主动离职" />
+              <el-option label="被动离职" value="被动离职" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="离职备注">
+            <el-input v-model="form.leaveRemark" type="textarea" placeholder="请输入离职备注" />
+          </el-form-item>
+        </template>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -251,7 +202,10 @@
           <el-input :value="viewForm.idCard" disabled />
         </el-form-item>
         <el-form-item label="当前阶段">
-          <el-input :value="stageNames[viewForm.currentStage] || '-'" disabled />
+          <el-input :value="filteredStageNames[viewForm.currentStage] || '-'" disabled />
+        </el-form-item>
+        <el-form-item label="产品线">
+          <el-input :value="viewForm.productLineName || '-'" disabled />
         </el-form-item>
         <el-form-item label="入职日期">
           <el-input :value="viewForm.entryDate ? formatDate(viewForm.entryDate) : '-'" disabled />
@@ -259,8 +213,8 @@
         <el-form-item label="离职日期">
           <el-input :value="viewForm.leaveDate ? formatDate(viewForm.leaveDate) : '-'" disabled />
         </el-form-item>
-        <el-form-item label="离职原因">
-          <el-input :value="viewForm.leaveReason || '-'" disabled />
+        <el-form-item label="离职类型">
+          <el-input :value="viewForm.leaveType || '-'" disabled />
         </el-form-item>
         <el-form-item label="离职备注">
           <el-input :value="viewForm.leaveRemark || '-'" disabled />
@@ -279,14 +233,13 @@
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { candidateApi, stageConfigApi } from '../api'
+import { employeeApi, stageConfigApi } from '../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, Refresh } from '@element-plus/icons-vue'
 
 const router = useRouter()
 
-const stageNames = ref({
-  employee_entry: '员工录入',
+const stageNames = {
+  candidate_entry: '候选录入',
   exam_declare: '机考申报',
   exam_complete: '机考完成',
   test_declare: '韧测申报',
@@ -298,20 +251,23 @@ const stageNames = ref({
   manager_interview: '主管面试',
   approval: '租用审批',
   offer: 'Offer',
+  pending_onboarding: '待入职',
   entry: '入职',
   leave: '离职'
-})
+}
+
+const stageNamesMap = ref(stageNames)
 
 const availableStages = ref([])
 
 const filteredStageNames = computed(() => {
   if (availableStages.value.length === 0) {
-    return stageNames.value
+    return stageNames
   }
   const filtered = {}
   availableStages.value.forEach(stage => {
-    if (stageNames.value[stage]) {
-      filtered[stage] = stageNames.value[stage]
+    if (stageNames[stage]) {
+      filtered[stage] = stageNames[stage]
     }
   })
   return filtered
@@ -325,7 +281,6 @@ const submitLoading = ref(false)
 const formRef = ref()
 const isEdit = ref(false)
 const currentId = ref(null)
-const editingRowIndex = ref(-1)
 const viewDialogVisible = ref(false)
 
 const viewForm = reactive({
@@ -335,9 +290,10 @@ const viewForm = reactive({
   email: '',
   idCard: '',
   currentStage: '',
+  productLineName: '',
   entryDate: null,
   leaveDate: null,
-  leaveReason: '',
+  leaveType: '',
   leaveRemark: '',
   lastOperator: ''
 })
@@ -358,23 +314,15 @@ const form = reactive({
   gender: '',
   phone: '',
   email: '',
-  idCard: ''
-})
-
-const editingForm = reactive({
-  name: '',
-  gender: '',
-  phone: '',
-  email: '',
   idCard: '',
-  currentStage: '',
+  currentStage: 'pending_onboarding',
   entryDate: null,
   leaveDate: null,
-  leaveReason: '',
+  leaveType: '',
   leaveRemark: ''
 })
 
-const rules = {
+const rules = computed(() => ({
   name: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
   gender: [{ required: true, message: '请选择性别', trigger: 'change' }],
   phone: [
@@ -392,17 +340,31 @@ const rules = {
       message: '请输入正确的身份证号码',
       trigger: 'blur'
     }
-  ]
-}
+  ],
+  currentStage: [{ required: true, message: '请选择当前阶段', trigger: 'change' }],
+  entryDate: form.currentStage === 'entry'
+    ? [{ required: true, message: '请选择入职日期', trigger: 'change' }]
+    : [],
+  leaveDate: form.currentStage === 'leave'
+    ? [{ required: true, message: '请选择离职日期', trigger: 'change' }]
+    : [],
+  leaveType: form.currentStage === 'leave'
+    ? [{ required: true, message: '请选择离职类型', trigger: 'change' }]
+    : []
+}))
 
 const fetchStageConfig = async () => {
   try {
     const data = await stageConfigApi.getByModule('employee_management')
-    if (data.config && data.config.stages) {
-      availableStages.value = data.config.stages
+    if (data.config) {
+      if (data.config.stages) {
+        availableStages.value = data.config.stages
+      }
+      if (data.config.stageNames) {
+        stageNamesMap.value = data.config.stageNames
+      }
     }
   } catch (error) {
-    console.error('Failed to fetch stage config:', error)
   }
 }
 
@@ -420,12 +382,11 @@ const fetchEmployees = async () => {
       name: searchForm.name,
       currentStage: searchForm.currentStage
     }
-    const data = await candidateApi.getEmployees(params)
-    
-    employees.value = data.candidates
-    pagination.total = data.total || data.candidates.length
+    const data = await employeeApi.getAll(params)
+
+    employees.value = data.employees
+    pagination.total = data.pagination?.total || data.employees.length
   } catch (error) {
-    console.error('Failed to fetch employees:', error)
   } finally {
     loading.value = false
   }
@@ -453,14 +414,6 @@ const handlePageSizeChange = (size) => {
   fetchEmployees()
 }
 
-const handleCreate = () => {
-  dialogTitle.value = '新增员工'
-  isEdit.value = false
-  dialogVisible.value = true
-}
-
-const phoneInputRef = ref(null)
-
 const handleView = (row) => {
   Object.assign(viewForm, {
     name: row.name || '',
@@ -469,9 +422,10 @@ const handleView = (row) => {
     email: row.email || '',
     idCard: row.idCard || '',
     currentStage: row.currentStage || '',
+    productLineName: row.productLine?.name || '',
     entryDate: row.entryDate || null,
     leaveDate: row.leaveDate || null,
-    leaveReason: row.leaveReason || '',
+    leaveType: row.leaveType || '',
     leaveRemark: row.leaveRemark || '',
     lastOperator: row.lastOperator?.realName || row.lastOperator?.username || ''
   })
@@ -487,174 +441,41 @@ const handleViewDialogClose = () => {
     email: '',
     idCard: '',
     currentStage: '',
+    productLineName: '',
     entryDate: null,
     leaveDate: null,
-    leaveReason: '',
+    leaveType: '',
     leaveRemark: '',
     lastOperator: ''
   })
 }
 
-const handleEdit = (row, index) => {
-  editingRowIndex.value = index
-  Object.assign(editingForm, {
-    name: row.name,
-    gender: row.gender,
-    phone: row.phone,
-    email: row.email,
-    idCard: row.idCard,
-    currentStage: row.currentStage || 'entry',
+const handleEdit = (row) => {
+  dialogTitle.value = '编辑员工'
+  isEdit.value = true
+  currentId.value = row.id
+  Object.assign(form, {
+    name: row.name || '',
+    gender: row.gender || '',
+    phone: row.phone || '',
+    email: row.email || '',
+    idCard: row.idCard || '',
+    currentStage: row.currentStage || 'pending_onboarding',
     entryDate: row.entryDate ? new Date(row.entryDate) : null,
     leaveDate: row.leaveDate ? new Date(row.leaveDate) : null,
-    leaveReason: row.leaveReason || '',
+    leaveType: row.leaveType || '',
     leaveRemark: row.leaveRemark || ''
   })
-  // Next tick to ensure the input element is rendered
-  setTimeout(() => {
-    if (phoneInputRef.value) {
-      phoneInputRef.value.focus()
-    }
-  }, 100)
-}
-
-const cancelEdit = () => {
-  editingRowIndex.value = -1
-  Object.assign(editingForm, {
-    name: '',
-    gender: '',
-    phone: '',
-    email: '',
-    idCard: '',
-    entryDate: null,
-    leaveDate: null,
-    leaveReason: '',
-    leaveRemark: ''
-  })
-}
-
-const handleLeaveDateChange = (date) => {
-  if (date) {
-    editingForm.leaveDate = date
-  }
-}
-
-const handleSave = async (index, row) => {
-  // Validate the form data
-  if (!editingForm.name) {
-    ElMessage.error('请输入姓名')
-    return
-  }
-  
-  if (!editingForm.gender) {
-    ElMessage.error('请选择性别')
-    return
-  }
-  
-  if (!editingForm.phone) {
-    ElMessage.error('请输入手机号')
-    return
-  }
-  
-  if (!/^1[3-9]\d{9}$/.test(editingForm.phone)) {
-    ElMessage.error('请输入正确的手机号')
-    return
-  }
-  
-  if (!editingForm.email) {
-    ElMessage.error('请输入邮箱')
-    return
-  }
-  
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editingForm.email)) {
-    ElMessage.error('请输入正确的邮箱')
-    return
-  }
-  
-  if (!editingForm.idCard) {
-    ElMessage.error('请输入身份证号码')
-    return
-  }
-  
-  if (!/(^\d{15}$)|(^\d{17}([0-9]|X|x)$)/.test(editingForm.idCard)) {
-    ElMessage.error('请输入正确的身份证号码')
-    return
-  }
-  
-  try {
-    // When editing, we need to preserve the existing product lines
-    // First, get the current employee information
-    const data = await candidateApi.getById(row.id)
-    const employee = data.candidate
-    
-    // Create update data with basic info and existing product lines
-    const updateData = {
-      name: editingForm.name,
-      gender: editingForm.gender,
-      phone: editingForm.phone,
-      email: editingForm.email,
-      idCard: editingForm.idCard,
-      currentStage: editingForm.currentStage,
-      entryDate: editingForm.entryDate,
-      entryRemark: '',
-      leaveDate: editingForm.leaveDate,
-      leaveReason: editingForm.leaveReason,
-      leaveRemark: editingForm.leaveRemark,
-      productLines: employee.productLines.map(pl => ({
-        id: pl.through.id,
-        productLineId: pl.id,
-        interviewStage: pl.through.interviewStage || pl.through.currentStage,
-        recommendDate: pl.through.recommendDate
-      }))
-    }
-    
-    await candidateApi.update(row.id, updateData)
-    ElMessage.success('更新成功')
-    editingRowIndex.value = -1
-    fetchEmployees()
-  } catch (error) {
-    // 错误已经在 axios 响应拦截器中处理，不需要重复显示
-  }
+  dialogVisible.value = true
 }
 
 const handleDelete = async (row) => {
   try {
-    await candidateApi.delete(row.id)
+    await employeeApi.delete(row.id)
     ElMessage.success('删除成功')
     fetchEmployees()
   } catch (error) {
     ElMessage.error(error.message || '删除失败')
-  }
-}
-
-const canAdvance = (row) => {
-  // 只有当员工处于员工录入阶段时可以推进到下一阶段
-  return row.currentStage === 'employee_entry'
-}
-
-const canRollback = (row) => {
-  // 只有当员工处于机考申报阶段时可以回退到员工录入阶段
-  return row.currentStage === 'exam_declare'
-}
-
-const handleAdvance = async (row) => {
-  try {
-    // 推进到下一阶段不需要关联产品线，只有在面试阶段才需要
-    await candidateApi.advance(row.id, { productLineId: row.productLine?.id })
-    ElMessage.success('推进成功')
-    fetchEmployees()
-  } catch (error) {
-    ElMessage.error(error.message || '推进失败')
-  }
-}
-
-const handleRollback = async (row) => {
-  try {
-    // 回退到上一阶段不需要关联产品线，只有在面试阶段才需要
-    await candidateApi.rollback(row.id, { productLineId: row.productLine?.id })
-    ElMessage.success('回退成功')
-    fetchEmployees()
-  } catch (error) {
-    ElMessage.error(error.message || '回退失败')
   }
 }
 
@@ -664,33 +485,25 @@ const handleSubmit = async () => {
 
   submitLoading.value = true
   try {
-    if (isEdit.value) {
-      // When editing, we need to preserve the existing product lines
-      // First, get the current employee information
-      const data = await candidateApi.getById(currentId.value)
-      const employee = data.candidate
-      
-      // Create update data with basic info and existing product lines
-      const updateData = {
-        ...form,
-        productLines: employee.productLines.map(pl => ({
-          id: pl.through.id,
-          productLineId: pl.id,
-          interviewStage: pl.through.interviewStage || pl.through.currentStage,
-          recommendDate: pl.through.recommendDate
-        }))
-      }
-      
-      await candidateApi.update(currentId.value, updateData)
-      ElMessage.success('更新成功')
-    } else {
-      await candidateApi.create(form)
-      ElMessage.success('创建成功')
+    const updateData = {
+      name: form.name,
+      gender: form.gender,
+      phone: form.phone,
+      email: form.email,
+      idCard: form.idCard,
+      currentStage: form.currentStage,
+      entryDate: form.currentStage !== 'leave' ? form.entryDate : null,
+      entryRemark: '',
+      leaveDate: form.currentStage === 'leave' ? form.leaveDate : null,
+      leaveType: form.currentStage === 'leave' ? form.leaveType : '',
+      leaveRemark: form.currentStage === 'leave' ? form.leaveRemark : ''
     }
+
+    await employeeApi.update(currentId.value, updateData)
+    ElMessage.success('更新成功')
     dialogVisible.value = false
     fetchEmployees()
   } catch (error) {
-    // 错误已经在 axios 响应拦截器中处理，不需要重复显示
   } finally {
     submitLoading.value = false
   }
@@ -703,7 +516,12 @@ const handleDialogClose = () => {
     gender: '',
     phone: '',
     email: '',
-    idCard: ''
+    idCard: '',
+    currentStage: 'pending_onboarding',
+    entryDate: null,
+    leaveDate: null,
+    leaveType: '',
+    leaveRemark: ''
   })
 }
 
@@ -723,9 +541,10 @@ onMounted(() => {
   margin-top: 0;
   padding-top: 0;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
   margin-bottom: 16px;
+  height: 36px;
 }
 
 .page-title {
@@ -736,12 +555,17 @@ onMounted(() => {
 }
 
 .card-container {
-  margin-top: 0;
-  padding-top: 0;
+  margin-top: -5px;
+  padding-top: 20px;
 }
 
 .search-form {
   margin-bottom: 20px;
+}
+
+:deep(.el-divider__text) {
+  color: #409eff;
+  font-weight: 600;
 }
 
 :deep(.el-tag.stage-tag) {

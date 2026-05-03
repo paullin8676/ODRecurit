@@ -16,7 +16,7 @@
 ```
 候选录入 → 机考申报 → 机考完成 → 韧测申报 → 韧测完成 → 
 推荐面试 → 资面安排 → 技术面试(一) → 技术面试(二) → 主管面试 → 
-租用审批 → Offer → 入职 → 离职
+租用审批 → Offer → 待入职 → 入职 → 离职
 ```
 
 ---
@@ -25,31 +25,35 @@
 
 ### 2.1 候选录入管理 (Candidate Entry)
 - **模块标识**: `candidate_entry`
-- **管理阶段**: `employee_entry`
+- **管理阶段**: `candidate_entry` 及所有后续阶段
 - **功能**:
   - 候选人信息录入（姓名、性别、手机号、邮箱、身份证号）
   - 候选人列表查看和搜索
   - 候选人详情查看
+  - 支持阶段筛选
 
 ### 2.2 机考管理 (Exam Management)
 - **模块标识**: `exam_management`
-- **管理阶段**: `exam_declare`, `exam_complete`
+- **管理阶段**: 所有阶段（从候选录入到离职）
 - **功能**:
-  - 机考申报
-  - 机考结果录入
-  - 机考记录管理
+  - 机考申报（行内编辑）
+  - 机考结果录入（行内编辑）
+  - 机考记录管理（查看对话框）
+  - 推进功能
 
 ### 2.3 韧测管理 (Test Management)
 - **模块标识**: `test_management`
-- **管理阶段**: `test_declare`, `test_complete`
+- **管理阶段**: 所有阶段（从候选录入到离职）
 - **功能**:
-  - 韧测申报
-  - 韧测结果录入
+  - 韧测申报（行内编辑）
+  - 韧测结果录入（行内编辑）
   - 面推功能（推荐到面试流程）
+  - 推进功能
+  - 查看功能（对话框）
 
 ### 2.4 面试管理 (Interview Management)
 - **模块标识**: `interview_management`
-- **管理阶段**: `recommend_interview`, `qualification_interview`, `tech_interview_1`, `tech_interview_2`, `manager_interview`, `approval`, `offer`
+- **管理阶段**: 所有阶段（从候选录入到离职）
 - **功能**:
   - 推荐面试录入
   - 资格面试管理
@@ -57,18 +61,24 @@
   - 主管面试管理
   - 租用审批管理
   - Offer管理
-  - 推进到入职（需填写入职日期和备注）
+  - 推进到待入职（offer阶段推进）
+  - 推进到入职（待入职阶段推进，需填写入职日期和备注）
+  - 员工自动创建（当候选人达到pending_onboarding阶段时，自动在Employee表创建记录）
 
 ### 2.5 员工管理 (Employee Management)
 - **模块标识**: `employee_management`
-- **管理阶段**: `entry`, `leave`
+- **管理阶段**: `pending_onboarding`, `entry`, `leave`
 - **功能**:
   - 员工列表查看
   - 员工信息查看（对话框查看）
-  - 员工信息编辑（行内编辑）
-  - 当前阶段可编辑（下拉选择入职/离职）
-  - 离职处理（自动更新状态）
-  - 入职日期、离职日期管理
+  - 员工信息编辑（对话框编辑）
+  - 姓名字段不可编辑
+  - 入职日期：仅在当前阶段为入职时显示，必填
+  - 离职日期：仅在当前阶段为离职时显示，必填
+  - 离职类型：仅在当前阶段为离职时显示，必填
+  - 离职备注：仅在当前阶段为离职时显示，选填
+  - 产品线信息显示
+  - 与Candidate表关联，保留候选人来源记录
 
 ### 2.6 用户管理 (User Management)
 - **功能**:
@@ -93,7 +103,6 @@
 ### 3.1 核心数据表
 
 #### 3.1.1 Candidate（候选人表）
-
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
 | id | INTEGER | 主键，自增 |
@@ -103,17 +112,32 @@
 | gender | STRING(10) | 性别 |
 | idCard | STRING(20) | 身份证号 |
 | currentStage | STRING(50) | 当前阶段 |
+| lastOperatorId | INTEGER | 最后操作人ID |
+| created_at | DATE | 创建时间 |
+| updated_at | DATE | 更新时间 |
+
+#### 3.1.2 Employee（员工表）
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| id | INTEGER | 主键，自增 |
+| name | STRING(100) | 姓名，必填 |
+| email | STRING(100) | 邮箱 |
+| phone | STRING(20) | 手机号 |
+| gender | STRING(10) | 性别 |
+| idCard | STRING(20) | 身份证号 |
+| currentStage | STRING(50) | 当前阶段（pending_onboarding/entry/leave） |
 | entryDate | DATE | 入职日期 |
 | entryRemark | TEXT | 入职备注 |
 | leaveDate | DATE | 离职日期 |
-| leaveReason | STRING(50) | 离职原因 |
+| leaveType | STRING(20) | 离职类型 |
 | leaveRemark | TEXT | 离职备注 |
+| productLineId | INTEGER | 产品线ID |
+| candidateId | INTEGER | 关联的候选人ID |
 | lastOperatorId | INTEGER | 最后操作人ID |
-| createdAt | DATE | 创建时间 |
-| updatedAt | DATE | 更新时间 |
+| created_at | DATE | 创建时间 |
+| updated_at | DATE | 更新时间 |
 
-#### 3.1.2 CandidateProductLine（候选人产品线关联表）
-
+#### 3.1.3 CandidateProductLine（候选人产品线关联表）
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
 | id | INTEGER | 主键，自增 |
@@ -121,77 +145,120 @@
 | productLineId | INTEGER | 产品线ID |
 | interviewStage | STRING(50) | 面试阶段 |
 | recommendDate | DATE | 推荐日期 |
-| createdAt | DATE | 创建时间 |
-| updatedAt | DATE | 更新时间 |
+| created_at | DATE | 创建时间 |
+| updated_at | DATE | 更新时间 |
 
-#### 3.1.3 Interview（面试记录表）
-
+#### 3.1.4 Interview（面试记录表）
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
 | id | INTEGER | 主键，自增 |
 | candidateProductLineId | INTEGER | 候选人产品线关联ID |
-| qualificationInterviewDate | DATE | 资面日期 |
-| qualificationInterviewer | STRING(100) | 资面顾问 |
-| qualificationConclusion | TEXT | 资面结论 |
-| qualificationPassed | BOOLEAN | 资面是否通过 |
-| techInterview1Date | DATE | 技一日期 |
-| techInterview1Interviewer | STRING(100) | 技一面试官 |
-| techInterview1Content | TEXT | 技一评价 |
-| techInterview1Passed | BOOLEAN | 技一是否通过 |
-| techInterview2Date | DATE | 技二日期 |
-| techInterview2Interviewer | STRING(100) | 技二面试官 |
-| techInterview2Content | TEXT | 技二评价 |
-| techInterview2Passed | BOOLEAN | 技二是否通过 |
-| managerInterviewDate | DATE | 主面日期 |
-| managerInterviewer | STRING(100) | 主考官 |
-| managerInterviewContent | TEXT | 主面评价 |
-| managerInterviewPassed | BOOLEAN | 主面是否通过 |
-| approvalDate | DATE | 审批日期 |
-| approver | STRING(100) | 审批人 |
-| approvalRemark | TEXT | 审批备注 |
-| approvalPassed | BOOLEAN | 审批是否通过 |
-| offerDate | DATE | Offer日期 |
-| offerApprover | STRING(100) | Offer审批人 |
-| offerRemark | TEXT | Offer备注 |
-| createdAt | DATE | 创建时间 |
-| updatedAt | DATE | 更新时间 |
+| currentStage | STRING(50) | 当前面试阶段 |
+| finalStatus | STRING(20) | 最终状态（pending/passed/failed） |
+| created_at | DATE | 创建时间 |
+| updated_at | DATE | 更新时间 |
 
-#### 3.1.4 Exam（机考表）
+#### 3.1.5 InterviewRound（面试轮次表）
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| id | INTEGER | 主键，自增 |
+| interviewId | INTEGER | 面试记录ID |
+| stageCode | STRING(50) | 阶段代码 |
+| stageIndex | INTEGER | 阶段索引 |
+| scheduledDate | DATE | 安排日期 |
+| interviewer | STRING(100) | 面试官 |
+| content | TEXT | 评价内容 |
+| passed | BOOLEAN | 是否通过 |
+| completedAt | DATE | 完成日期 |
+| created_at | DATE | 创建时间 |
+| updated_at | DATE | 更新时间 |
 
+#### 3.1.6 Exam（机考表）
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
 | id | INTEGER | 主键，自增 |
 | candidateId | INTEGER | 候选人ID |
 | examPaperId | INTEGER | 试卷ID |
-| status | STRING(20) | 状态 |
-| score | INTEGER | 分数 |
-| createdAt | DATE | 创建时间 |
-| updatedAt | DATE | 更新时间 |
+| isOnlineExam | BOOLEAN | 是否在线考试 |
+| examDate | DATE | 机考日期 |
+| examCompleteDate | DATE | 机考完成日期 |
+| examTotalScore | INTEGER | 机考总分 |
+| isCheating | BOOLEAN | 是否作弊 |
+| examScore | INTEGER | 机考分数 |
+| examPassed | BOOLEAN | 机考是否通过 |
+| created_at | DATE | 创建时间 |
+| updated_at | DATE | 更新时间 |
 
-#### 3.1.5 Test（韧测表）
-
+#### 3.1.7 Test（韧测表）
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
 | id | INTEGER | 主键，自增 |
 | candidateId | INTEGER | 候选人ID |
 | testTypeId | INTEGER | 韧测类型ID |
-| status | STRING(20) | 状态 |
-| result | TEXT | 结果 |
-| createdAt | DATE | 创建时间 |
-| updatedAt | DATE | 更新时间 |
+| testDate | DATE | 韧测日期 |
+| testCompleteDate | DATE | 韧测完成日期 |
+| worryValue | INTEGER | 忧虑值 |
+| optimismValue | INTEGER | 乐观值 |
+| consistency | INTEGER | 一致性 |
+| testPassed | BOOLEAN | 韧测是否通过 |
+| created_at | DATE | 创建时间 |
+| updated_at | DATE | 更新时间 |
 
-#### 3.1.6 StageConfig（阶段配置表）
-
+#### 3.1.8 ExamPaper（机考试卷表）
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
 | id | INTEGER | 主键，自增 |
-| module | STRING(50) | 模块标识 |
+| name | STRING(100) | 试卷名称 |
+| description | TEXT | 描述 |
+| totalScore | INTEGER | 总分 |
+| isActive | BOOLEAN | 是否激活 |
+| created_at | DATE | 创建时间 |
+| updated_at | DATE | 更新时间 |
+
+#### 3.1.9 ExamPassLine（机考合格线表）
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| id | INTEGER | 主键，自增 |
+| examPaperId | INTEGER | 试卷ID |
+| passLine | INTEGER | 合格线 |
+| isCurrent | BOOLEAN | 是否当前版本 |
+| created_at | DATE | 创建时间 |
+| updated_at | DATE | 更新时间 |
+
+#### 3.1.10 ExamStage（机考阶段表）
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| id | INTEGER | 主键，自增 |
+| candidateId | INTEGER | 候选人ID |
+| examPaperId | INTEGER | 试卷ID |
+| score | FLOAT | 分数 |
+| status | STRING(20) | 状态 |
+| examDate | DATE | 机考日期 |
+| feedback | TEXT | 反馈 |
+| created_at | DATE | 创建时间 |
+| updated_at | DATE | 更新时间 |
+
+#### 3.1.11 TestType（韧测类型表）
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| id | INTEGER | 主键，自增 |
+| name | STRING(100) | 类型名称 |
+| description | TEXT | 描述 |
+| isActive | BOOLEAN | 是否激活 |
+| created_at | DATE | 创建时间 |
+| updated_at | DATE | 更新时间 |
+
+#### 3.1.12 StageConfig（阶段配置表）
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| id | INTEGER | 主键，自增 |
+| module | STRING(255) | 模块标识 |
 | stages | TEXT(JSON) | 阶段列表 |
-| createdAt | DATE | 创建时间 |
-| updatedAt | DATE | 更新时间 |
+| stage_names | TEXT(JSON) | 阶段名称映射 |
+| created_at | DATE | 创建时间 |
+| updated_at | DATE | 更新时间 |
 
-#### 3.1.7 User（用户表）
-
+#### 3.1.13 User（用户表）
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
 | id | INTEGER | 主键，自增 |
@@ -203,29 +270,55 @@
 | phone | STRING(20) | 手机号 |
 | managerId | INTEGER | 上级ID |
 | isActive | BOOLEAN | 是否激活 |
-| createdAt | DATE | 创建时间 |
-| updatedAt | DATE | 更新时间 |
+| lastLoginAt | DATE | 最后登录时间 |
+| created_at | DATE | 创建时间 |
+| updated_at | DATE | 更新时间 |
 
-#### 3.1.8 ProductLine（产品线表）
-
+#### 3.1.14 ProductLine（产品线表）
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
 | id | INTEGER | 主键，自增 |
 | name | STRING(100) | 产品线名称 |
 | clientOwner | STRING(100) | 客户负责人 |
+| description | TEXT | 描述 |
 | isActive | BOOLEAN | 是否激活 |
-| createdAt | DATE | 创建时间 |
-| updatedAt | DATE | 更新时间 |
+| created_at | DATE | 创建时间 |
+| updated_at | DATE | 更新时间 |
+
+#### 3.1.15 ProductLineUser（产品线用户关联表）
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| productLineId | INTEGER | 产品线ID |
+| userId | INTEGER | 用户ID |
+| created_at | DATE | 创建时间 |
+| updated_at | DATE | 更新时间 |
+| (productLineId, userId) | | 联合主键 |
 
 ### 3.2 数据关联关系
 
 ```
-Candidate 1:N Exam
-Candidate 1:N Test
-Candidate 1:N CandidateProductLine
-CandidateProductLine 1:1 Interview
-ProductLine 1:N CandidateProductLine
 User 1:N Candidate (lastOperator)
+User 1:N Employee (lastOperator)
+User 1:N User (subordinates/manager)
+User N:M ProductLine (via ProductLineUser)
+
+Candidate 1:1 Exam
+Candidate 1:1 Test
+Candidate 1:N CandidateProductLine
+Candidate 1:1 Employee (when stage reaches pending_onboarding)
+
+CandidateProductLine 1:1 Interview
+CandidateProductLine N:1 ProductLine
+
+Interview 1:N InterviewRound
+
+ProductLine 1:N CandidateProductLine
+ProductLine 1:N Employee
+
+ExamPaper 1:N ExamPassLine
+ExamPaper 1:N Exam
+
+TestType 1:N Test
 ```
 
 ---
@@ -246,7 +339,6 @@ User 1:N Candidate (lastOperator)
 | 接口 | 方法 | 说明 |
 |------|------|------|
 | `/api/candidates` | GET | 获取候选人列表 |
-| `/api/candidates/employees` | GET | 获取员工列表（入职/离职） |
 | `/api/candidates/:id` | GET | 获取候选人详情 |
 | `/api/candidates` | POST | 创建候选人 |
 | `/api/candidates/:id` | PUT | 更新候选人 |
@@ -257,7 +349,16 @@ User 1:N Candidate (lastOperator)
 | `/api/candidates/:id/push-interview` | POST | 面推到面试 |
 | `/api/candidates/:id/available-product-lines` | GET | 获取可用产品线 |
 
-### 4.3 机考接口
+### 4.3 员工接口
+
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/api/employees` | GET | 获取员工列表 |
+| `/api/employees/:id` | GET | 获取员工详情 |
+| `/api/employees/:id` | PUT | 更新员工信息 |
+| `/api/employees/:id` | DELETE | 删除员工 |
+
+### 4.4 机考接口
 
 | 接口 | 方法 | 说明 |
 |------|------|------|
@@ -267,7 +368,7 @@ User 1:N Candidate (lastOperator)
 | `/api/exams/:id` | PUT | 更新机考记录 |
 | `/api/exams/:id` | DELETE | 删除机考记录 |
 
-### 4.4 韧测接口
+### 4.5 韧测接口
 
 | 接口 | 方法 | 说明 |
 |------|------|------|
@@ -277,18 +378,18 @@ User 1:N Candidate (lastOperator)
 | `/api/tests/:id` | PUT | 更新韧测记录 |
 | `/api/tests/:id` | DELETE | 删除韧测记录 |
 
-### 4.5 面试接口
+### 4.6 面试接口
 
 | 接口 | 方法 | 说明 |
 |------|------|------|
 | `/api/interviews` | GET | 获取面试列表 |
-| `/api/interviews/candidate/:candidateId` | GET | 获取候选人面试记录 |
 | `/api/interviews/:id` | GET | 获取面试详情 |
 | `/api/interviews` | POST | 创建面试记录 |
 | `/api/interviews/:id` | PUT | 更新面试记录 |
 | `/api/interviews/:id` | DELETE | 删除面试记录 |
+| `/api/interviews/:id/advance` | PUT | 推进阶段 |
 
-### 4.6 阶段配置接口
+### 4.7 阶段配置接口
 
 | 接口 | 方法 | 说明 |
 |------|------|------|
@@ -298,7 +399,7 @@ User 1:N Candidate (lastOperator)
 | `/api/stage-configs/:module` | PUT | 更新阶段配置 |
 | `/api/stage-configs/:module` | DELETE | 删除阶段配置 |
 
-### 4.7 用户接口
+### 4.8 用户接口
 
 | 接口 | 方法 | 说明 |
 |------|------|------|
@@ -308,7 +409,7 @@ User 1:N Candidate (lastOperator)
 | `/api/users/:id` | PUT | 更新用户 |
 | `/api/users/:id` | DELETE | 删除用户 |
 
-### 4.8 产品线接口
+### 4.9 产品线接口
 
 | 接口 | 方法 | 说明 |
 |------|------|------|
@@ -318,6 +419,15 @@ User 1:N Candidate (lastOperator)
 | `/api/product-lines/:id` | PUT | 更新产品线 |
 | `/api/product-lines/:id` | DELETE | 删除产品线 |
 
+### 4.10 其他接口
+
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/api/exam-papers` | GET/POST/PUT/DELETE | 试卷管理 |
+| `/api/exam-pass-lines` | GET/POST/PUT/DELETE | 合格线管理 |
+| `/api/test-types` | GET/POST/PUT/DELETE | 韧测类型管理 |
+| `/api/statistics` | GET | 统计数据 |
+
 ---
 
 ## 5. 核心业务逻辑
@@ -326,7 +436,7 @@ User 1:N Candidate (lastOperator)
 
 | 当前阶段 | 下一阶段 | 推进条件 |
 |----------|----------|----------|
-| employee_entry | exam_declare | 自动 |
+| candidate_entry | exam_declare | 自动 |
 | exam_declare | exam_complete | 机考完成 |
 | exam_complete | test_declare | 自动 |
 | test_declare | test_complete | 韧测完成 |
@@ -337,8 +447,9 @@ User 1:N Candidate (lastOperator)
 | tech_interview_2 | manager_interview | 技二通过 |
 | manager_interview | approval | 主面通过 |
 | approval | offer | 审批通过 |
-| offer | entry | 填写入职信息 |
-| entry | leave | 填写离职信息 |
+| offer | pending_onboarding | Offer通过 |
+| pending_onboarding | entry | 填写入职日期 |
+| entry | leave | 填写离职日期、类型、备注 |
 
 ### 5.2 面推规则
 
@@ -353,41 +464,59 @@ User 1:N Candidate (lastOperator)
    - 没有面试记录（第一次面推）
    - 所有面试记录都未通过，且有可用产品线
 
-### 5.3 编辑权限控制
+### 5.3 员工自动创建逻辑
 
-- 当前模块配置阶段的记录可编辑
-- 后续阶段的记录不可编辑，只能查看
-- 当前阶段之前的字段不可编辑
+当候选人被推进到 `pending_onboarding` 阶段时：
+1. 后端自动检查该候选人是否已存在Employee记录
+2. 如果不存在，则创建新的Employee记录
+3. Employee记录包含：
+   - 候选人的基本信息（name, email, phone, gender, idCard）
+   - currentStage 初始化为 'pending_onboarding'
+   - productLineId 设置为当前推进的产品线ID
+   - candidateId 设置为候选人ID
+   - lastOperatorId 设置为当前操作人
+4. 同时更新CandidateProductLine和Interview表的阶段字段
 
-### 5.4 入职推进特殊处理
+### 5.4 员工管理编辑规则
 
-当从offer阶段推进到入职阶段时：
-1. 弹出对话框填写入职日期和备注
-2. 更新Candidate表的entryDate和entryRemark字段
-3. 更新Candidate表的currentStage为'entry'
-4. 更新该候选人所有CandidateProductLine记录的interviewStage为'entry'（确保其他面试记录不可编辑）
+1. **不可编辑字段**: 姓名（从候选人同步，不可修改）
+2. **入职日期**:
+   - 仅当 currentStage === 'entry' 时显示
+   - 必填字段
+3. **离职日期、类型、备注**:
+   - 仅当 currentStage === 'leave' 时显示
+   - 离职日期和类型必填
+   - 离职备注选填
+4. **阶段切换影响**:
+   - 修改currentStage时，动态显示/隐藏相关字段
+   - 表单验证规则动态变化
 
-### 5.5 离职处理
+### 5.5 阶段字段关系说明
 
-- 填写离职日期后，自动将currentStage改为'leave'
-- 删除离职日期后，自动将currentStage改回'entry'
-- **优先级**: 如果前端明确提供了currentStage，则以提供的为准，不再根据leaveDate自动设置
-
-### 5.6 阶段字段关系说明
-
-系统中有两个阶段字段，分别位于不同表中：
+系统中有三个阶段字段，分别位于不同表中：
 
 | 字段 | 表名 | 说明 |
 |------|------|------|
 | currentStage | Candidate | 候选人的全局当前阶段 |
+| currentStage | Employee | 员工的当前阶段 |
 | interviewStage | CandidateProductLine | 候选人在某个具体产品线的面试阶段 |
+| currentStage | Interview | 面试记录的当前阶段 |
 
 **更新规则**:
-1. 前端编辑员工信息时，修改的是 Candidate.currentStage
-2. 后端更新候选人信息时，优先使用前端提供的 currentStage
-3. 后端不再根据产品线的 interviewStage 自动覆盖 Candidate.currentStage
-4. 只有前端没有提供 currentStage 时，后端才会根据 leaveDate 自动判断
-5. 面试管理页面中，编辑按钮的显示逻辑依赖 candidate.currentStage（不为entry/leave时显示）
+1. 候选人推进阶段时，同步更新 Candidate.currentStage、CandidateProductLine.interviewStage、Interview.currentStage
+2. Employee.currentStage 与候选人阶段在创建时同步，后续独立管理
+3. 员工管理页面只修改 Employee.currentStage，不影响 Candidate.currentStage
+
+### 5.6 数据库字段命名规范
+
+**数据库表字段**:
+- 使用 snake_case（小写下划线）命名
+- 例如：`current_stage`, `product_line_id`, `created_at`
+
+**Sequelize模型属性**:
+- 使用 camelCase（小驼峰）命名
+- 配置 underscored: true 自动映射
+- 例如：`currentStage`, `productLineId`, `createdAt`
 
 ---
 
@@ -417,18 +546,26 @@ User 1:N Candidate (lastOperator)
 #### 6.2.1 面试管理页面 (InterviewStage.vue)
 - 按阶段筛选候选人
 - 查看和编辑面试记录
-- 推进阶段（offer阶段需弹框填入职信息）
+- 推进阶段
+- offer阶段推进到待入职
+- pending_onboarding阶段推进到入职（弹框填入职信息）
 - 阶段字段按配置显示
 - 已完成阶段字段不可编辑
+- 与TestStage.vue和Employees.vue保持一致的布局结构
 
 #### 6.2.2 员工管理页面 (Employees.vue)
-- 行内编辑员工信息
-- 入职日期、离职日期管理
-- 自动状态更新（填写离职日期→离职状态）
-- 无删除功能
+- 对话框编辑员工信息
+- 姓名字段禁用，不可编辑
+- 入职日期：仅在入职阶段显示，必填
+- 离职日期、类型、备注：仅在离职阶段显示
+- 产品线信息显示
+- 与TestStage.vue保持一致的布局结构
 
 #### 6.2.3 韧测管理页面 (TestStage.vue)
 - 韧测记录列表
+- 行内编辑
+- 查看对话框
+- 推进按钮
 - 面推按钮（按规则显示/隐藏）
 
 ---
@@ -439,11 +576,11 @@ User 1:N Candidate (lastOperator)
 
 ```json
 {
-  "candidate_entry": ["employee_entry"],
-  "exam_management": ["exam_declare", "exam_complete"],
-  "test_management": ["test_declare", "test_complete"],
-  "interview_management": ["recommend_interview", "qualification_interview", "tech_interview_1", "tech_interview_2", "manager_interview", "approval", "offer"],
-  "employee_management": ["entry", "leave"]
+  "candidate_entry": ["candidate_entry", "exam_declare", "exam_complete", "test_declare", "test_complete", "recommend_interview", "qualification_interview", "tech_interview_1", "tech_interview_2", "manager_interview", "approval", "offer", "pending_onboarding", "entry", "leave"],
+  "exam_management": ["candidate_entry", "exam_declare", "exam_complete", "test_declare", "test_complete", "recommend_interview", "qualification_interview", "tech_interview_1", "tech_interview_2", "manager_interview", "approval", "offer", "pending_onboarding", "entry", "leave"],
+  "test_management": ["candidate_entry", "exam_declare", "exam_complete", "test_declare", "test_complete", "recommend_interview", "qualification_interview", "tech_interview_1", "tech_interview_2", "manager_interview", "approval", "offer", "pending_onboarding", "entry", "leave"],
+  "interview_management": ["candidate_entry", "exam_declare", "exam_complete", "test_declare", "test_complete", "recommend_interview", "qualification_interview", "tech_interview_1", "tech_interview_2", "manager_interview", "approval", "offer", "pending_onboarding", "entry", "leave"],
+  "employee_management": ["pending_onboarding", "entry", "leave"]
 }
 ```
 
@@ -502,11 +639,13 @@ node src/app.js
             ↓
 面推 → CandidateProductLine表 + Interview表
             ↓
-面试流程 → Interview表字段更新
+面试流程 → Interview表 + InterviewRound表
             ↓
-入职 → Candidate表(entryDate, currentStage='entry')
+待入职 → Candidate表(currentStage='pending_onboarding') + Employee表(自动创建)
             ↓
-离职 → Candidate表(leaveDate, currentStage='leave')
+入职 → Employee表(entryDate, currentStage='entry')
+            ↓
+离职 → Employee表(leaveDate, leaveType, leaveRemark, currentStage='leave')
 ```
 
 ---
@@ -525,5 +664,7 @@ node src/app.js
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
-| 1.1 | 2026-04-30 | 更新内容：<br>1. 员工管理页面新增查看对话框功能<br>2. 员工管理页面当前阶段可编辑（下拉选择入职/离职）<br>3. 修复后端更新候选人阶段的逻辑，不再根据产品线interviewStage自动覆盖Candidate.currentStage<br>4. 明确currentStage和interviewStage的关系和更新规则 |
+| 1.2 | 2026-05-04 | 更新内容：<br>1. 新增Employee表，分离Candidate和Employee数据<br>2. 员工管理页面改为对话框编辑，姓名不可编辑<br>3. 入职日期和离职相关字段条件显示与必填验证<br>4. 统一所有模块的页面布局<br>5. 完善阶段流转规则（新增pending_onboarding阶段）<br>6. 实现员工自动创建逻辑<br>7. 规范数据库字段命名为snake_case<br>8. 更新数据库Schema文档<br>9. 员工管理删除推进功能，产品线信息显示<br>10. 修复面试推进阶段同步问题 |
+| 1.1 | 2026-04-30 | 更新内容：<br>1. 员工管理页面新增查看对话框功能<br>2. 员工管理页面当前阶段可编辑（下拉选择入职/离职）<br>3. 修复后端更新候选人阶段的逻辑<br>4. 明确currentStage和interviewStage的关系和更新规则 |
 | 1.0 | 2026-04 | 初始版本 |
+

@@ -174,7 +174,6 @@ const fetchData = async () => {
 
     setTimeout(() => initStageChart(), 100)
   } catch (error) {
-    console.error('Failed to fetch dashboard data:', error)
   }
 }
 

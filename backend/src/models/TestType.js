@@ -20,6 +20,10 @@ const TestType = sequelize.define('TestType', {
     type: DataTypes.BOOLEAN,
     defaultValue: true
   }
+}, {
+  tableName: 'TestType',
+  timestamps: true,
+  underscored: true
 });
 
 module.exports = TestType;

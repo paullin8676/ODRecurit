@@ -138,8 +138,8 @@
                   </el-button>
                 </template>
               </template>
-              <!-- 韧测完成及之后阶段显示面推按钮 -->
-              <template v-if="isAfterTestComplete(row) && row.canRecommend">
+              <!-- 韧测完成及之后阶段且韧测通过显示面推按钮 -->
+              <template v-if="isAfterTestComplete(row) && row.canRecommend && row.test?.testPassed === true">
                 <el-button type="success" link size="small" @click="handlePushInterview(row)">
                   面推
                 </el-button>
@@ -319,7 +319,7 @@ import { ElMessage } from 'element-plus'
 import { Search, Refresh } from '@element-plus/icons-vue'
 
 const STAGES = [
-  'employee_entry',
+  'candidate_entry',
   'exam_declare',
   'exam_complete',
   'test_declare',
@@ -331,12 +331,13 @@ const STAGES = [
   'manager_interview',
   'approval',
   'offer',
+  'pending_onboarding',
   'entry',
   'leave'
 ]
 
 const stageNames = {
-  employee_entry: '候选录入',
+  candidate_entry: '候选录入',
   exam_declare: '机考申报',
   exam_complete: '机考完成',
   test_declare: '韧测申报',
@@ -348,6 +349,7 @@ const stageNames = {
   manager_interview: '主管面试',
   approval: '租用审批',
   offer: 'Offer',
+  pending_onboarding: '待入职',
   entry: '入职',
   leave: '离职'
 }
@@ -425,7 +427,8 @@ const fetchEmployees = async () => {
     const params = {
       page: pagination.page,
       pageSize: pagination.pageSize,
-      name: searchForm.name
+      name: searchForm.name,
+      currentStage: searchForm.currentStage || undefined
     }
     const data = await testApi.getAll(params)
     
@@ -460,7 +463,7 @@ const fetchEmployees = async () => {
       // Get all stages that are in the configured stages or subsequent to them
       const allRelevantStages = new Set()
       const STAGES = [
-        'employee_entry',
+        'candidate_entry',
         'exam_declare',
         'exam_complete',
         'test_declare',
@@ -472,6 +475,7 @@ const fetchEmployees = async () => {
         'manager_interview',
         'approval',
         'offer',
+        'pending_onboarding',
         'entry',
         'leave'
       ]
@@ -495,7 +499,6 @@ const fetchEmployees = async () => {
     employees.value = transformedEmployees
     pagination.total = transformedEmployees.length
   } catch (error) {
-    console.error('Failed to fetch tests:', error)
   } finally {
     loading.value = false
   }
@@ -510,7 +513,6 @@ const fetchStageConfig = async () => {
       availableStages.value = Object.keys(stageNames)
     }
   } catch (error) {
-    console.error('Failed to fetch stage config:', error)
     availableStages.value = Object.keys(stageNames)
   }
 }
@@ -520,7 +522,6 @@ const fetchOptions = async () => {
     const types = await testTypeApi.getAll()
     testTypes.value = types.testTypes || []
   } catch (error) {
-    console.error('Failed to fetch options:', error)
   }
 }
 
@@ -610,26 +611,27 @@ const handleDialogClose = () => {
 }
 
 const canAdvance = (row) => {
-  // 除了离职阶段外，其他阶段都可以推进
   if (row.currentStage === 'leave') {
     return false
   }
-  
-  // 检查韧测记录是否存在
+
+  if (row.currentStage === 'test_complete') {
+    return false
+  }
+
   if (!row.test) {
     return false
   }
-  
-  // 检查所有必填字段是否已填写
+
   const test = row.test
-  return test.testTypeId !== null && test.testTypeId !== undefined && // 韧测类型
-         test.testDate !== null && test.testDate !== undefined && // 韧测日期
-         test.testCompleteDate !== null && test.testCompleteDate !== undefined && // 完成日期
-         test.worryValue !== null && test.worryValue !== undefined && // 忧虑值
-         test.optimismValue !== null && test.optimismValue !== undefined && // 乐观值
-         test.consistency !== null && test.consistency !== undefined && // 一致性
-         typeof test.testPassed === 'boolean' && // 是否通过
-         test.testPassed === true // 只有通过才可以推进
+  return test.testTypeId !== null && test.testTypeId !== undefined &&
+         test.testDate !== null && test.testDate !== undefined &&
+         test.testCompleteDate !== null && test.testCompleteDate !== undefined &&
+         test.worryValue !== null && test.worryValue !== undefined &&
+         test.optimismValue !== null && test.optimismValue !== undefined &&
+         test.consistency !== null && test.consistency !== undefined &&
+         typeof test.testPassed === 'boolean' &&
+         test.testPassed === true
 }
 
 const isCurrentStage = (row) => {

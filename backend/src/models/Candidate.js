@@ -38,28 +38,12 @@ const Candidate = sequelize.define('Candidate', {
   currentStage: {
     type: DataTypes.STRING(50),
     allowNull: true,
-    defaultValue: 'employee_entry'
-  },
-  entryDate: {
-    type: DataTypes.DATE,
-    allowNull: true
-  },
-  entryRemark: {
-    type: DataTypes.TEXT,
-    allowNull: true
-  },
-  leaveDate: {
-    type: DataTypes.DATE,
-    allowNull: true
-  },
-  leaveReason: {
-    type: DataTypes.STRING(50),
-    allowNull: true
-  },
-  leaveRemark: {
-    type: DataTypes.TEXT,
-    allowNull: true
+    defaultValue: 'candidate_entry'
   }
+}, {
+  tableName: 'Candidate',
+  timestamps: true,
+  underscored: true
 });
 
 module.exports = Candidate;

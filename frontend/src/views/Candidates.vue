@@ -186,7 +186,7 @@ const router = useRouter()
 const phoneInputRef = ref(null)
 
 const stageNames = {
-  employee_entry: '候选录入',
+  candidate_entry: '候选录入',
   exam_declare: '机考申报',
   exam_complete: '机考完成',
   test_declare: '韧测申报',
@@ -198,6 +198,7 @@ const stageNames = {
   manager_interview: '主管面试',
   approval: '租用审批',
   offer: 'Offer',
+  pending_onboarding: '待入职',
   entry: '入职',
   leave: '离职'
 }
@@ -282,7 +283,6 @@ const fetchStageConfig = async () => {
       availableStages.value = Object.keys(stageNames)
     }
   } catch (error) {
-    console.error('Failed to fetch stage config:', error)
     availableStages.value = Object.keys(stageNames)
   }
 }
@@ -296,19 +296,16 @@ const fetchCandidates = async () => {
       ...searchForm
     }
     const data = await candidateApi.getAll(params)
-    
-    // For candidate entry, we don't need to flatten by product lines
+
     let candidatesList = data.candidates.map(candidate => ({
       ...candidate,
       currentStage: candidate.currentStage
     }))
-    
-    // Filter candidates based on stage configuration and all subsequent stages
+
     if (availableStages.value.length > 0) {
-      // Get all stages that are in the configured stages or subsequent to them
       const allRelevantStages = new Set()
       const STAGES = [
-        'employee_entry',
+        'candidate_entry',
         'exam_declare',
         'exam_complete',
         'test_declare',
@@ -320,11 +317,11 @@ const fetchCandidates = async () => {
         'manager_interview',
         'approval',
         'offer',
+        'pending_onboarding',
         'entry',
         'leave'
       ]
-      
-      // For each configured stage, add it and all subsequent stages
+
       availableStages.value.forEach(stage => {
         const stageIndex = STAGES.indexOf(stage)
         if (stageIndex !== -1) {
@@ -333,20 +330,17 @@ const fetchCandidates = async () => {
           }
         }
       })
-      
-      // Filter candidates to include only those in relevant stages
+
       candidatesList = candidatesList.filter(candidate => {
         return allRelevantStages.has(candidate.currentStage)
       })
     }
-    
-    // Apply pagination
+
     const startIndex = (pagination.page - 1) * pagination.pageSize
     const endIndex = startIndex + pagination.pageSize
     candidates.value = candidatesList.slice(startIndex, endIndex)
     pagination.total = candidatesList.length
   } catch (error) {
-    console.error('Failed to fetch candidates:', error)
   } finally {
     loading.value = false
   }
@@ -393,7 +387,6 @@ const handleEdit = (row, index) => {
     email: row.email,
     idCard: row.idCard
   })
-  // Next tick to ensure the input element is rendered
   setTimeout(() => {
     if (phoneInputRef.value) {
       phoneInputRef.value.focus()
@@ -413,64 +406,58 @@ const cancelEdit = () => {
 }
 
 const handleSave = async (index, row) => {
-  // Validate the form data
   if (!editingForm.name) {
     ElMessage.error('请输入姓名')
     return
   }
-  
+
   if (!editingForm.gender) {
     ElMessage.error('请选择性别')
     return
   }
-  
+
   if (!editingForm.phone) {
     ElMessage.error('请输入手机号')
     return
   }
-  
+
   if (!/^1[3-9]\d{9}$/.test(editingForm.phone)) {
     ElMessage.error('请输入正确的手机号')
     return
   }
-  
+
   if (!editingForm.email) {
     ElMessage.error('请输入邮箱')
     return
   }
-  
+
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editingForm.email)) {
     ElMessage.error('请输入正确的邮箱')
     return
   }
-  
+
   if (!editingForm.idCard) {
     ElMessage.error('请输入身份证号码')
     return
   }
-  
+
   if (!/(^\d{15}$)|(^\d{17}([0-9]|X|x)$)/.test(editingForm.idCard)) {
     ElMessage.error('请输入正确的身份证号码')
     return
   }
-  
+
   try {
-    // In candidate entry stage, we don't need to handle product lines
-    // Create update data with only basic info
     const updateData = {
       ...editingForm
     }
-    
+
     await candidateApi.update(row.id, updateData)
     ElMessage.success('更新成功')
     editingRowIndex.value = -1
     fetchCandidates()
   } catch (error) {
-    // 错误已经在 axios 响应拦截器中处理，不需要重复显示
   }
 }
-
-
 
 const handleDelete = async (row) => {
   try {
@@ -483,23 +470,19 @@ const handleDelete = async (row) => {
 }
 
 const canAdvance = (row) => {
-  // 除了离职阶段外，其他阶段都可以推进
   return row.currentStage !== 'leave'
 }
 
 const canRollback = (row) => {
-  // 只有当候选人处于机考申报阶段时可以回退到候选录入阶段
   return row.currentStage === 'exam_declare'
 }
 
 const isCurrentStage = (row) => {
-  // 检查记录是否处于该模块的现阶段（即阶段配置中的第一个阶段）
   return availableStages.value.length > 0 && row.currentStage === availableStages.value[0]
 }
 
 const handleAdvance = async (row) => {
   try {
-    // 推进到下一阶段不需要关联产品线，只有在面试阶段才需要
     await candidateApi.advance(row.id, { productLineId: row.productLine?.id })
     ElMessage.success('推进成功')
     fetchCandidates()
@@ -510,7 +493,6 @@ const handleAdvance = async (row) => {
 
 const handleRollback = async (row) => {
   try {
-    // 回退到上一阶段不需要关联产品线，只有在面试阶段才需要
     await candidateApi.rollback(row.id, { productLineId: row.productLine?.id })
     ElMessage.success('回退成功')
     fetchCandidates()
@@ -526,12 +508,10 @@ const handleSubmit = async () => {
   submitLoading.value = true
   try {
     if (isEdit.value) {
-      // In candidate entry stage, we don't need to handle product lines
-      // Create update data with only basic info
       const updateData = {
         ...form
       }
-      
+
       await candidateApi.update(currentId.value, updateData)
       ElMessage.success('更新成功')
     } else {

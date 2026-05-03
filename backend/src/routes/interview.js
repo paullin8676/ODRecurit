@@ -1,173 +1,288 @@
 const express = require('express');
-const { Interview, CandidateProductLine } = require('../models');
+const { Interview, CandidateProductLine, InterviewRound, StageConfig, Candidate, Employee } = require('../models');
 
 const router = express.Router();
+
+const INTERVIEW_STAGES = [
+  'recommend_interview',
+  'qualification_interview',
+  'tech_interview_1',
+  'tech_interview_2',
+  'manager_interview',
+  'approval',
+  'offer',
+  'pending_onboarding'
+];
+
+// Helper function to sync candidate current stage
+const syncCandidateStage = async (candidateId) => {
+  const candidateProductLines = await CandidateProductLine.findAll({
+    where: { candidateId },
+    include: [Interview]
+  });
+
+  let targetStage = 'test_complete';
+
+  for (const cpl of candidateProductLines) {
+    if (cpl.Interview) {
+      if (cpl.Interview.finalStatus === 'passed') {
+        targetStage = 'pending_onboarding';
+        break;
+      } else if (cpl.Interview.finalStatus === 'pending' && targetStage === 'test_complete') {
+        targetStage = cpl.Interview.currentStage;
+      }
+    }
+  }
+
+  await Candidate.update(
+    { currentStage: targetStage },
+    { where: { id: candidateId } }
+  );
+};
+
+// Helper function to transform interview data
+const transformInterview = (interview) => {
+  const candidate = interview.candidateProductLine?.Candidate;
+  const productLine = interview.candidateProductLine?.ProductLine;
+  const recommendDate = interview.candidateProductLine?.recommendDate;
+  const candidateProductLineId = interview.candidateProductLine?.id;
+  const productLineId = interview.candidateProductLine?.productLineId;
+
+  const rounds = interview.rounds || [];
+  const roundsMap = {};
+  rounds.forEach(round => {
+    roundsMap[round.stageCode] = round;
+  });
+
+  return {
+    ...interview.toJSON(),
+    Candidate: candidate,
+    productLine: productLine,
+    productLineId: productLineId,
+    candidateProductLineId: candidateProductLineId,
+    recommendDate: recommendDate,
+    clientOwner: productLine?.clientOwner || '',
+    rounds: rounds,
+    roundsMap: roundsMap
+  };
+};
 
 // Get all interviews
 router.get('/', async (req, res, next) => {
   try {
+    const { currentStage, name } = req.query;
+    
+    const whereClause = {};
+    if (currentStage) {
+      whereClause.currentStage = currentStage;
+    }
+    
     const interviews = await Interview.findAll({
+      attributes: ['id', 'candidateProductLineId', 'currentStage', 'finalStatus', 'createdAt', 'updatedAt'],
+      where: whereClause,
       include: [
         {
           model: CandidateProductLine,
           as: 'candidateProductLine',
           include: ['Candidate', 'ProductLine']
+        },
+        {
+          model: InterviewRound,
+          as: 'rounds'
         }
-      ]
+      ],
+      order: [['id', 'DESC']]
     });
     
-    // Transform data to match expected format
-    const transformedInterviews = interviews.map(interview => {
-      const candidate = interview.candidateProductLine?.Candidate;
-      const productLine = interview.candidateProductLine?.ProductLine;
-      const recommendDate = interview.candidateProductLine?.recommendDate;
-      const candidateProductLineId = interview.candidateProductLine?.id;
-      const productLineId = interview.candidateProductLine?.productLineId;
-
-      return {
-        ...interview.toJSON(),
-        Candidate: candidate,
-        productLine: productLine,
-        productLineId: productLineId,
-        candidateProductLineId: candidateProductLineId,
-        recommendDate: recommendDate,
-        clientOwner: productLine?.clientOwner || ''
-      };
-    }).filter(interview => interview.Candidate && interview.productLine); // Filter out interviews without candidate or product line
+    let transformedInterviews = interviews.map(transformInterview).filter(i => i.Candidate && i.productLine);
+    
+    // Apply name filter if provided
+    if (name) {
+      const nameLower = name.toLowerCase();
+      transformedInterviews = transformedInterviews.filter(interview => 
+        interview.Candidate && interview.Candidate.name && 
+        interview.Candidate.name.toLowerCase().includes(nameLower)
+      );
+    }
     
     res.json({ interviews: transformedInterviews });
   } catch (error) {
-    console.error('Error in GET interviews:', error);
-    console.error('Error stack:', error.stack);
     next(error);
   }
 });
 
-// Create or update interview
+// Create or update interview with rounds
 router.post('/', async (req, res, next) => {
   try {
-    const { candidateId, productLineId, recommendDate, qualificationInterviewDate, qualificationInterviewer, qualificationConclusion, qualificationPassed, techInterview1Date, techInterview1Interviewer, techInterview1Content, techInterview1Passed, techInterview2Date, techInterview2Interviewer, techInterview2Content, techInterview2Passed, managerInterviewDate, managerInterviewer, managerInterviewContent, managerInterviewPassed, approvalDate, approver, approvalRemark, approvalPassed, offerDate, offerApprover, offerRemark, entryDate, entryRemark, leaveDate, leaveReason, leaveRemark } = req.body;
+    const { candidateId, productLineId, recommendDate, rounds, currentStage, finalStatus } = req.body;
     
-    // Find or create CandidateProductLine
     let candidateProductLine = await CandidateProductLine.findOne({
       where: { candidateId, productLineId }
     });
     
     if (!candidateProductLine) {
-      // Create new CandidateProductLine if it doesn't exist
       candidateProductLine = await CandidateProductLine.create({
         candidateId,
         productLineId,
         recommendDate
       });
     } else {
-      // Update existing CandidateProductLine
-      await candidateProductLine.update({
-        recommendDate
-      });
+      await candidateProductLine.update({ recommendDate });
     }
     
-    // Create or update interview
     const [interview, created] = await Interview.findOrCreate({
       where: { candidateProductLineId: candidateProductLine.id },
       defaults: {
-        qualificationInterviewDate,
-        qualificationInterviewer,
-        qualificationConclusion,
-        qualificationPassed,
-        techInterview1Date,
-        techInterview1Interviewer,
-        techInterview1Content,
-        techInterview1Passed,
-        techInterview2Date,
-        techInterview2Interviewer,
-        techInterview2Content,
-        techInterview2Passed,
-        managerInterviewDate,
-        managerInterviewer,
-        managerInterviewContent,
-        managerInterviewPassed,
-        approvalDate,
-        approver,
-        approvalRemark,
-        approvalPassed,
-        offerDate,
-        offerApprover,
-        offerRemark,
-        entryDate,
-        entryRemark,
-        leaveDate,
-        leaveReason,
-        leaveRemark
+        currentStage: currentStage || 'recommend_interview',
+        finalStatus: finalStatus || 'pending'
       }
     });
     
     if (!created) {
-      // Update existing interview
       await interview.update({
-        qualificationInterviewDate,
-        qualificationInterviewer,
-        qualificationConclusion,
-        qualificationPassed,
-        techInterview1Date,
-        techInterview1Interviewer,
-        techInterview1Content,
-        techInterview1Passed,
-        techInterview2Date,
-        techInterview2Interviewer,
-        techInterview2Content,
-        techInterview2Passed,
-        managerInterviewDate,
-        managerInterviewer,
-        managerInterviewContent,
-        managerInterviewPassed,
-        approvalDate,
-        approver,
-        approvalRemark,
-        approvalPassed,
-        offerDate,
-        offerApprover,
-        offerRemark,
-        entryDate,
-        entryRemark,
-        leaveDate,
-        leaveReason,
-        leaveRemark
+        currentStage: currentStage || interview.currentStage,
+        finalStatus: finalStatus || interview.finalStatus
       });
     }
     
-    // Return the updated interview with associations
+    if (rounds && Array.isArray(rounds)) {
+      for (const roundData of rounds) {
+        const [round, roundCreated] = await InterviewRound.findOrCreate({
+          where: {
+            interviewId: interview.id,
+            stageCode: roundData.stageCode
+          },
+          defaults: {
+            stageIndex: INTERVIEW_STAGES.indexOf(roundData.stageCode),
+            scheduledDate: roundData.scheduledDate,
+            interviewer: roundData.interviewer,
+            content: roundData.content,
+            passed: roundData.passed,
+            completedAt: roundData.completedAt
+          }
+        });
+        
+        if (!roundCreated) {
+          await round.update({
+            scheduledDate: roundData.scheduledDate,
+            interviewer: roundData.interviewer,
+            content: roundData.content,
+            passed: roundData.passed,
+            completedAt: roundData.completedAt
+          });
+        }
+      }
+    }
+    
     const updatedInterview = await Interview.findByPk(interview.id, {
+      attributes: ['id', 'candidateProductLineId', 'currentStage', 'finalStatus', 'createdAt', 'updatedAt'],
       include: [
         {
           model: CandidateProductLine,
           as: 'candidateProductLine',
           include: ['Candidate', 'ProductLine']
+        },
+        {
+          model: InterviewRound,
+          as: 'rounds'
         }
       ]
     });
+
+    await syncCandidateStage(candidateId);
     
-    // Transform data to match expected format
-    const candidate = updatedInterview.candidateProductLine?.Candidate;
-    const productLine = updatedInterview.candidateProductLine?.ProductLine;
-    const cplRecommendDate = updatedInterview.candidateProductLine?.recommendDate;
-    const cplId = updatedInterview.candidateProductLine?.id;
-    const cplProductLineId = updatedInterview.candidateProductLine?.productLineId;
-
-    const transformedInterview = {
-      ...updatedInterview.toJSON(),
-      Candidate: candidate,
-      productLine: productLine,
-      productLineId: cplProductLineId,
-      candidateProductLineId: cplId,
-      recommendDate: cplRecommendDate,
-      clientOwner: productLine?.clientOwner || ''
-    };
-
-    res.json(transformedInterview);
+    res.json(transformInterview(updatedInterview));
   } catch (error) {
-    console.error('Error in interview operation:', error);
-    console.error('Error stack:', error.stack);
+    next(error);
+  }
+});
+
+// Update interview with rounds
+router.put('/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { candidateId, productLineId, recommendDate, rounds, currentStage, finalStatus } = req.body;
+
+    const interview = await Interview.findByPk(id);
+    if (!interview) {
+      return res.status(404).json({ error: 'Interview not found' });
+    }
+
+    let finalStatusToSet = interview.finalStatus;
+
+    if (interview.finalStatus !== 'failed' && interview.finalStatus !== 'passed') {
+      if (rounds && Array.isArray(rounds)) {
+        let hasFailed = false;
+        let offerPassed = false;
+
+        for (const roundData of rounds) {
+          const [round, roundCreated] = await InterviewRound.findOrCreate({
+            where: {
+              interviewId: interview.id,
+              stageCode: roundData.stageCode
+            },
+            defaults: {
+              stageIndex: INTERVIEW_STAGES.indexOf(roundData.stageCode),
+              scheduledDate: roundData.scheduledDate,
+              interviewer: roundData.interviewer,
+              content: roundData.content,
+              passed: roundData.passed,
+              completedAt: roundData.completedAt
+            }
+          });
+
+          if (!roundCreated) {
+            await round.update({
+              scheduledDate: roundData.scheduledDate,
+              interviewer: roundData.interviewer,
+              content: roundData.content,
+              passed: roundData.passed,
+              completedAt: roundData.completedAt
+            });
+          }
+
+          const passedValue = roundData.passed;
+          if (passedValue === false || passedValue === 0) {
+            hasFailed = true;
+          } else if (passedValue === true || passedValue === 1) {
+            if (roundData.stageCode === 'offer') {
+              offerPassed = true;
+            }
+          }
+        }
+
+        if (offerPassed) {
+          finalStatusToSet = 'passed';
+        } else if (hasFailed) {
+          finalStatusToSet = 'failed';
+        }
+      }
+    }
+
+    await interview.update({
+      currentStage: currentStage || interview.currentStage,
+      finalStatus: finalStatusToSet
+    });
+
+    const updatedInterview = await Interview.findByPk(interview.id, {
+      attributes: ['id', 'candidateProductLineId', 'currentStage', 'finalStatus', 'createdAt', 'updatedAt'],
+      include: [
+        {
+          model: CandidateProductLine,
+          as: 'candidateProductLine',
+          include: ['Candidate', 'ProductLine']
+        },
+        {
+          model: InterviewRound,
+          as: 'rounds'
+        }
+      ]
+    });
+
+    await syncCandidateStage(updatedInterview.candidateProductLine.candidateId);
+    
+    res.json(transformInterview(updatedInterview));
+  } catch (error) {
     next(error);
   }
 });
@@ -178,7 +293,6 @@ router.get('/candidate/:candidateId', async (req, res, next) => {
     const { candidateId } = req.params;
     const { productLineId } = req.query;
     
-    // Find CandidateProductLine records for this candidate
     const where = { candidateId };
     if (productLineId) {
       where.productLineId = productLineId;
@@ -189,42 +303,173 @@ router.get('/candidate/:candidateId', async (req, res, next) => {
       include: ['Candidate', 'ProductLine']
     });
     
-    // Find interviews for these CandidateProductLine records
     const candidateProductLineIds = candidateProductLines.map(cpl => cpl.id);
     const interviews = await Interview.findAll({
+      attributes: ['id', 'candidateProductLineId', 'currentStage', 'finalStatus', 'createdAt', 'updatedAt'],
       where: { candidateProductLineId: candidateProductLineIds },
       include: [
         {
           model: CandidateProductLine,
           as: 'candidateProductLine',
           include: ['Candidate', 'ProductLine']
+        },
+        {
+          model: InterviewRound,
+          as: 'rounds'
         }
-      ]
+      ],
+      order: [['id', 'DESC']]
     });
     
-    // Transform data to match expected format
-    const transformedInterviews = interviews.map(interview => {
-      const candidate = interview.candidateProductLine?.Candidate;
-      const productLine = interview.candidateProductLine?.ProductLine;
-      const recommendDate = interview.candidateProductLine?.recommendDate;
-      const candidateProductLineId = interview.candidateProductLine?.id;
-      const productLineId = interview.candidateProductLine?.productLineId;
-
-      return {
-        ...interview.toJSON(),
-        Candidate: candidate,
-        productLine: productLine,
-        productLineId: productLineId,
-        candidateProductLineId: candidateProductLineId,
-        recommendDate: recommendDate,
-        clientOwner: productLine?.clientOwner || ''
-      };
-    }).filter(interview => interview.Candidate && interview.productLine); // Filter out interviews without candidate or product line
+    const transformedInterviews = interviews.map(transformInterview).filter(i => i.Candidate && i.productLine);
     
     res.json({ interviews: transformedInterviews });
   } catch (error) {
-    console.error('Error in GET interviews by candidate:', error);
-    console.error('Error stack:', error.stack);
+    next(error);
+  }
+});
+
+// Create or update a single interview round
+router.post('/rounds', async (req, res, next) => {
+  try {
+    const { interviewId, stageCode, stageIndex, scheduledDate, interviewer, content, passed, completedAt } = req.body;
+    
+    const [round, created] = await InterviewRound.findOrCreate({
+      where: { interviewId, stageCode },
+      defaults: {
+        stageIndex: stageIndex !== undefined ? stageIndex : INTERVIEW_STAGES.indexOf(stageCode),
+        scheduledDate,
+        interviewer,
+        content,
+        passed,
+        completedAt
+      }
+    });
+    
+    if (!created) {
+      await round.update({
+        scheduledDate,
+        interviewer,
+        content,
+        passed,
+        completedAt
+      });
+    }
+    
+    res.json(round);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Update an interview round by ID
+router.put('/rounds/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { scheduledDate, interviewer, content, passed, completedAt } = req.body;
+    
+    const round = await InterviewRound.findByPk(id);
+    if (!round) {
+      return res.status(404).json({ error: 'Interview round not found' });
+    }
+    
+    await round.update({
+      scheduledDate,
+      interviewer,
+      content,
+      passed,
+      completedAt
+    });
+    
+    res.json(round);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Advance interview to next stage
+router.post('/advance/:interviewId', async (req, res, next) => {
+  try {
+    const { interviewId } = req.params;
+    
+    const interview = await Interview.findByPk(interviewId, {
+      attributes: ['id', 'candidateProductLineId', 'currentStage', 'finalStatus', 'createdAt', 'updatedAt'],
+      include: [
+        { model: InterviewRound, as: 'rounds' },
+        { model: CandidateProductLine, as: 'candidateProductLine' }
+      ]
+    });
+    
+    if (!interview) {
+      return res.status(404).json({ error: 'Interview not found' });
+    }
+    
+    const currentIndex = INTERVIEW_STAGES.indexOf(interview.currentStage);
+    let nextStage;
+    
+    if (currentIndex < INTERVIEW_STAGES.length - 1) {
+      nextStage = INTERVIEW_STAGES[currentIndex + 1];
+      await interview.update({ currentStage: nextStage });
+
+      await InterviewRound.findOrCreate({
+        where: {
+          interviewId: interview.id,
+          stageCode: nextStage
+        },
+        defaults: {
+          stageIndex: currentIndex + 1
+        }
+      });
+
+      if (interview.candidateProductLine) {
+        await interview.candidateProductLine.update({ interviewStage: nextStage });
+      }
+    } else {
+      await interview.update({ finalStatus: 'passed' });
+
+      if (interview.candidateProductLine) {
+        await interview.candidateProductLine.update({ interviewStage: 'offer' });
+
+        const candidate = await Candidate.findByPk(interview.candidateProductLine.candidateId);
+        if (candidate) {
+          const [employee, created] = await Employee.findOrCreate({
+            where: { idCard: candidate.idCard },
+            defaults: {
+              name: candidate.name,
+              email: candidate.email,
+              phone: candidate.phone,
+              gender: candidate.gender,
+              idCard: candidate.idCard,
+              lastOperatorId: candidate.lastOperatorId,
+              currentStage: 'pending_onboarding'
+            }
+          });
+
+          if (created) {
+          }
+        }
+      }
+    }
+    
+    const updatedInterview = await Interview.findByPk(interview.id, {
+      attributes: ['id', 'candidateProductLineId', 'currentStage', 'finalStatus', 'createdAt', 'updatedAt'],
+      include: [
+        {
+          model: CandidateProductLine,
+          as: 'candidateProductLine',
+          include: ['Candidate', 'ProductLine']
+        },
+        {
+          model: InterviewRound,
+          as: 'rounds'
+        }
+      ]
+    });
+
+    await syncCandidateStage(updatedInterview.candidateProductLine.candidateId);
+    
+    res.json(transformInterview(updatedInterview));
+  } catch (error) {
     next(error);
   }
 });

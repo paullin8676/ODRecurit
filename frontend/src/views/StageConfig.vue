@@ -105,6 +105,7 @@ const stages = [
   { key: 'manager_interview', name: '主管面试' },
   { key: 'approval', name: '租用审批' },
   { key: 'offer', name: 'Offer' },
+  { key: 'pending_onboarding', name: '待入职' },
   { key: 'entry', name: '入职' },
   { key: 'leave', name: '离职' }
 ]
@@ -170,7 +171,6 @@ const fetchConfig = async () => {
       })
     }
   } catch (error) {
-    console.error('Failed to fetch stage config:', error)
     ElMessage.error('获取阶段配置失败')
   } finally {
     loading.value = false
@@ -192,7 +192,6 @@ const handleSave = async () => {
     ElMessage.success('保存成功')
     await fetchConfig()
   } catch (error) {
-    console.error('Failed to save stage config:', error)
     ElMessage.error('保存失败')
   } finally {
     saveLoading.value = false

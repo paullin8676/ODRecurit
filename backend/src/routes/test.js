@@ -6,7 +6,7 @@ const { authenticate } = require('../middleware/auth');
 const router = express.Router();
 
 const STAGES = [
-  'employee_entry',
+  'candidate_entry',
   'exam_declare',
   'exam_complete',
   'test_declare',
@@ -18,6 +18,7 @@ const STAGES = [
   'manager_interview',
   'approval',
   'offer',
+  'pending_onboarding',
   'entry',
   'leave'
 ];
@@ -129,8 +130,6 @@ router.get('/', authenticate, async (req, res, next) => {
       pageSize: parseInt(pageSize)
     });
   } catch (error) {
-    console.error('Error in GET tests:', error);
-    console.error('Error stack:', error.stack);
     next(error);
   }
 });
@@ -148,8 +147,6 @@ router.get('/candidate/:candidateId', authenticate, async (req, res, next) => {
     });
     res.json({ test });
   } catch (error) {
-    console.error('Error in GET test by candidate:', error);
-    console.error('Error stack:', error.stack);
     next(error);
   }
 });
@@ -206,8 +203,6 @@ router.post('/', authenticate, async (req, res, next) => {
 
     res.json(updatedTest);
   } catch (error) {
-    console.error('Error in test operation:', error);
-    console.error('Error stack:', error.stack);
     next(error);
   }
 });
@@ -249,8 +244,6 @@ router.put('/:id', authenticate, async (req, res, next) => {
 
     res.json(updatedTest);
   } catch (error) {
-    console.error('Error in update test:', error);
-    console.error('Error stack:', error.stack);
     next(error);
   }
 });
@@ -265,8 +258,6 @@ router.delete('/:id', authenticate, async (req, res, next) => {
     await test.destroy();
     res.json({ message: 'Test deleted successfully' });
   } catch (error) {
-    console.error('Error in delete test:', error);
-    console.error('Error stack:', error.stack);
     next(error);
   }
 });

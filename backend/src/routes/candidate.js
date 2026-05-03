@@ -1,12 +1,11 @@
 const express = require('express');
-const { Op } = require('sequelize');
-const { Candidate, User, ProductLine, ExamPaper, TestType, CandidateProductLine, Interview } = require('../models');
+const { Candidate, User, ProductLine, ExamPaper, TestType, CandidateProductLine, Interview, Employee } = require('../models');
 const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
 const STAGES = [
-  'employee_entry',
+  'candidate_entry',
   'exam_declare',
   'exam_complete',
   'test_declare',
@@ -18,16 +17,17 @@ const STAGES = [
   'manager_interview',
   'approval',
   'offer',
+  'pending_onboarding',
   'entry',
   'leave'
 ];
 
 router.get('/', authenticate, async (req, res, next) => {
   try {
-    const { name, currentStage, productLineId, startDate, endDate, examPassed, testPassed, page = 1, pageSize = 20 } = req.query;
+    const { name, currentStage, page = 1, pageSize = 20 } = req.query;
 
     const candidates = await Candidate.findAll({
-      order: [['createdAt', 'DESC']],
+      order: [['created_at', 'DESC']],
       include: [
         {
           model: User,
@@ -44,14 +44,7 @@ router.get('/', authenticate, async (req, res, next) => {
           include: [
             {
               model: Interview,
-              attributes: [
-                'qualificationInterviewDate', 'qualificationInterviewer', 'qualificationConclusion', 'qualificationPassed',
-                'techInterview1Date', 'techInterview1Interviewer', 'techInterview1Content', 'techInterview1Passed',
-                'techInterview2Date', 'techInterview2Interviewer', 'techInterview2Content', 'techInterview2Passed',
-                'managerInterviewDate', 'managerInterviewer', 'managerInterviewContent', 'managerInterviewPassed',
-                'approvalDate', 'approver', 'approvalRemark', 'approvalPassed',
-                'offerDate', 'offerApprover', 'offerRemark'
-              ]
+              attributes: ['id', 'currentStage', 'finalStatus']
             }
           ]
         });
@@ -60,7 +53,6 @@ router.get('/', authenticate, async (req, res, next) => {
         for (const pl of productLines) {
           const productLine = await ProductLine.findByPk(pl.productLineId);
           if (productLine) {
-            const interview = pl.Interview || {};
             productLineDetails.push({
               id: productLine.id,
               name: productLine.name,
@@ -70,29 +62,8 @@ router.get('/', authenticate, async (req, res, next) => {
                 productLineId: pl.productLineId,
                 interviewStage: pl.interviewStage,
                 recommendDate: pl.recommendDate,
-                qualificationInterviewDate: interview.qualificationInterviewDate,
-                qualificationInterviewer: interview.qualificationInterviewer,
-                qualificationConclusion: interview.qualificationConclusion,
-                qualificationPassed: interview.qualificationPassed,
-                techInterview1Date: interview.techInterview1Date,
-                techInterview1Interviewer: interview.techInterview1Interviewer,
-                techInterview1Content: interview.techInterview1Content,
-                techInterview1Passed: interview.techInterview1Passed,
-                techInterview2Date: interview.techInterview2Date,
-                techInterview2Interviewer: interview.techInterview2Interviewer,
-                techInterview2Content: interview.techInterview2Content,
-                techInterview2Passed: interview.techInterview2Passed,
-                managerInterviewDate: interview.managerInterviewDate,
-                managerInterviewer: interview.managerInterviewer,
-                managerInterviewContent: interview.managerInterviewContent,
-                managerInterviewPassed: interview.managerInterviewPassed,
-                approvalDate: interview.approvalDate,
-                approver: interview.approver,
-                approvalRemark: interview.approvalRemark,
-                approvalPassed: interview.approvalPassed,
-                offerDate: interview.offerDate,
-                offerApprover: interview.offerApprover,
-                offerRemark: interview.offerRemark
+                currentStage: pl.Interview?.currentStage,
+                finalStatus: pl.Interview?.finalStatus
               }
             });
           }
@@ -108,18 +79,18 @@ router.get('/', authenticate, async (req, res, next) => {
     );
 
     let filteredCandidates = candidatesWithProductLines;
-    
+
     if (name) {
       const nameLower = name.toLowerCase();
-      filteredCandidates = filteredCandidates.filter(candidate => 
+      filteredCandidates = filteredCandidates.filter(candidate =>
         candidate.name.toLowerCase().includes(nameLower)
       );
     }
-    
+
     if (currentStage) {
       filteredCandidates = filteredCandidates.filter(candidate => {
         if (candidate.productLines && candidate.productLines.length > 0) {
-          return candidate.productLines.some(productLine => 
+          return candidate.productLines.some(productLine =>
             productLine.through.interviewStage === currentStage
           );
         } else {
@@ -127,138 +98,13 @@ router.get('/', authenticate, async (req, res, next) => {
         }
       });
     }
-    
-    const filteredCount = filteredCandidates.length;
+
+    const total = filteredCandidates.length;
+    const startIndex = (parseInt(page) - 1) * parseInt(pageSize);
+    const paginatedCandidates = filteredCandidates.slice(startIndex, startIndex + parseInt(pageSize));
 
     res.json({
-      candidates: filteredCandidates
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-const EMPLOYEE_STAGES = ['entry', 'leave'];
-
-router.get('/employees', authenticate, async (req, res, next) => {
-  try {
-    const { name, currentStage, page = 1, pageSize = 20 } = req.query;
-
-    const entryProductLines = await CandidateProductLine.findAll({
-      where: {
-        interviewStage: 'entry'
-      },
-      include: [
-        {
-          model: Interview,
-          attributes: [
-            'qualificationInterviewDate', 'qualificationInterviewer', 'qualificationConclusion', 'qualificationPassed',
-            'techInterview1Date', 'techInterview1Interviewer', 'techInterview1Content', 'techInterview1Passed',
-            'techInterview2Date', 'techInterview2Interviewer', 'techInterview2Content', 'techInterview2Passed',
-            'managerInterviewDate', 'managerInterviewer', 'managerInterviewContent', 'managerInterviewPassed',
-            'approvalDate', 'approver', 'approvalRemark', 'approvalPassed',
-            'offerDate', 'offerApprover', 'offerRemark'
-          ]
-        },
-        {
-          model: ProductLine,
-          attributes: ['id', 'name', 'clientOwner']
-        }
-      ]
-    });
-
-    const candidateIds = [...new Set(entryProductLines.map(ep => ep.candidateId))];
-    
-    let whereClause = {
-      id: candidateIds,
-      currentStage: {
-        [Op.in]: EMPLOYEE_STAGES
-      }
-    };
-
-    if (currentStage && EMPLOYEE_STAGES.includes(currentStage)) {
-      whereClause.currentStage = currentStage;
-    }
-
-    if (name) {
-      whereClause.name = {
-        [Op.like]: `%${name}%`
-      };
-    }
-
-    const candidates = await Candidate.findAll({
-      where: whereClause,
-      order: [['createdAt', 'DESC']],
-      include: [
-        {
-          model: User,
-          as: 'lastOperator',
-          attributes: ['id', 'username', 'realName']
-        }
-      ],
-      limit: parseInt(pageSize),
-      offset: (parseInt(page) - 1) * parseInt(pageSize)
-    });
-
-    const total = await Candidate.count({ where: whereClause });
-
-    const candidatesWithProductLines = await Promise.all(
-      candidates.map(async (candidate) => {
-        const productLines = entryProductLines.filter(ep => ep.candidateId === candidate.id);
-
-        const productLineDetails = [];
-        for (const pl of productLines) {
-          const productLine = pl.ProductLine;
-          if (productLine) {
-            const interview = pl.Interview || {};
-            productLineDetails.push({
-              id: productLine.id,
-              name: productLine.name,
-              clientOwner: productLine.clientOwner,
-              through: {
-                id: pl.id,
-                productLineId: pl.productLineId,
-                interviewStage: pl.interviewStage,
-                recommendDate: pl.recommendDate,
-                qualificationInterviewDate: interview.qualificationInterviewDate,
-                qualificationInterviewer: interview.qualificationInterviewer,
-                qualificationConclusion: interview.qualificationConclusion,
-                qualificationPassed: interview.qualificationPassed,
-                techInterview1Date: interview.techInterview1Date,
-                techInterview1Interviewer: interview.techInterview1Interviewer,
-                techInterview1Content: interview.techInterview1Content,
-                techInterview1Passed: interview.techInterview1Passed,
-                techInterview2Date: interview.techInterview2Date,
-                techInterview2Interviewer: interview.techInterview2Interviewer,
-                techInterview2Content: interview.techInterview2Content,
-                techInterview2Passed: interview.techInterview2Passed,
-                managerInterviewDate: interview.managerInterviewDate,
-                managerInterviewer: interview.managerInterviewer,
-                managerInterviewContent: interview.managerInterviewContent,
-                managerInterviewPassed: interview.managerInterviewPassed,
-                approvalDate: interview.approvalDate,
-                approver: interview.approver,
-                approvalRemark: interview.approvalRemark,
-                approvalPassed: interview.approvalPassed,
-                offerDate: interview.offerDate,
-                offerApprover: interview.offerApprover,
-                offerRemark: interview.offerRemark
-              }
-            });
-          }
-        }
-
-        const candidateObj = candidate.toJSON();
-        if (candidate.lastOperator) {
-          candidateObj.lastOperator = candidate.lastOperator.toJSON();
-        }
-        candidateObj.productLines = productLineDetails;
-        return candidateObj;
-      })
-    );
-
-    res.json({
-      candidates: candidatesWithProductLines,
+      candidates: paginatedCandidates,
       total,
       page: parseInt(page),
       pageSize: parseInt(pageSize)
@@ -289,14 +135,7 @@ router.get('/:id', authenticate, async (req, res, next) => {
       include: [
         {
           model: Interview,
-          attributes: [
-            'qualificationInterviewDate', 'qualificationInterviewer', 'qualificationConclusion', 'qualificationPassed',
-            'techInterview1Date', 'techInterview1Interviewer', 'techInterview1Content', 'techInterview1Passed',
-            'techInterview2Date', 'techInterview2Interviewer', 'techInterview2Content', 'techInterview2Passed',
-            'managerInterviewDate', 'managerInterviewer', 'managerInterviewContent', 'managerInterviewPassed',
-            'approvalDate', 'approver', 'approvalRemark', 'approvalPassed',
-            'offerDate', 'offerApprover', 'offerRemark'
-          ]
+          attributes: ['id', 'currentStage', 'finalStatus']
         }
       ]
     });
@@ -305,7 +144,6 @@ router.get('/:id', authenticate, async (req, res, next) => {
     for (const pl of productLines) {
       const productLine = await ProductLine.findByPk(pl.productLineId);
       if (productLine) {
-        const interview = pl.Interview || {};
         productLineDetails.push({
           id: productLine.id,
           name: productLine.name,
@@ -315,29 +153,8 @@ router.get('/:id', authenticate, async (req, res, next) => {
             productLineId: pl.productLineId,
             interviewStage: pl.interviewStage,
             recommendDate: pl.recommendDate,
-            qualificationInterviewDate: interview.qualificationInterviewDate,
-            qualificationInterviewer: interview.qualificationInterviewer,
-            qualificationConclusion: interview.qualificationConclusion,
-            qualificationPassed: interview.qualificationPassed,
-            techInterview1Date: interview.techInterview1Date,
-            techInterview1Interviewer: interview.techInterview1Interviewer,
-            techInterview1Content: interview.techInterview1Content,
-            techInterview1Passed: interview.techInterview1Passed,
-            techInterview2Date: interview.techInterview2Date,
-            techInterview2Interviewer: interview.techInterview2Interviewer,
-            techInterview2Content: interview.techInterview2Content,
-            techInterview2Passed: interview.techInterview2Passed,
-            managerInterviewDate: interview.managerInterviewDate,
-            managerInterviewer: interview.managerInterviewer,
-            managerInterviewContent: interview.managerInterviewContent,
-            managerInterviewPassed: interview.managerInterviewPassed,
-            approvalDate: interview.approvalDate,
-            approver: interview.approver,
-            approvalRemark: interview.approvalRemark,
-            approvalPassed: interview.approvalPassed,
-            offerDate: interview.offerDate,
-            offerApprover: interview.offerApprover,
-            offerRemark: interview.offerRemark
+            currentStage: pl.Interview?.currentStage,
+            finalStatus: pl.Interview?.finalStatus
           }
         });
       }
@@ -402,6 +219,7 @@ router.post('/', authenticate, async (req, res, next) => {
       phone,
       gender,
       idCard,
+      currentStage: 'candidate_entry',
       lastOperatorId: req.user.id
     });
 
@@ -410,11 +228,13 @@ router.post('/', authenticate, async (req, res, next) => {
         const newAssociation = await CandidateProductLine.create({
           candidateId: candidate.id,
           productLineId: pl.productLineId,
-          interviewStage: 'employee_entry'
+          interviewStage: 'recommend_interview'
         });
-        
+
         await Interview.create({
-          candidateProductLineId: newAssociation.id
+          candidateProductLineId: newAssociation.id,
+          currentStage: 'recommend_interview',
+          finalStatus: 'pending'
         });
       }
     }
@@ -449,7 +269,7 @@ router.put('/:id', authenticate, async (req, res, next) => {
       return res.status(404).json({ error: 'Candidate not found' });
     }
 
-    const { productLines, entryDate, entryRemark, leaveDate, leaveReason, leaveRemark, ...basicInfo } = req.body;
+    const { productLines, ...basicInfo } = req.body;
 
     if (!basicInfo.name) {
       return res.status(400).json({ error: 'Name is required' });
@@ -491,21 +311,6 @@ router.put('/:id', authenticate, async (req, res, next) => {
       }
     }
 
-    if (entryDate !== undefined) updateData.entryDate = entryDate;
-    if (entryRemark !== undefined) updateData.entryRemark = entryRemark;
-    if (leaveDate !== undefined) updateData.leaveDate = leaveDate;
-    if (leaveReason !== undefined) updateData.leaveReason = leaveReason;
-    if (leaveRemark !== undefined) updateData.leaveRemark = leaveRemark;
-
-    // 只有当前端没有提供currentStage时，才根据leaveDate自动设置
-    if (!updateData.currentStage) {
-      if (leaveDate && !candidate.leaveDate) {
-        updateData.currentStage = 'leave';
-      } else if (!leaveDate && candidate.leaveDate) {
-        updateData.currentStage = 'entry';
-      }
-    }
-
     await candidate.update(updateData);
 
     if (productLines && Array.isArray(productLines)) {
@@ -518,47 +323,23 @@ router.put('/:id', authenticate, async (req, res, next) => {
 
       for (const pl of productLines) {
         if (pl.id) {
-          const candidateProductLineData = {
+          await CandidateProductLine.update({
             productLineId: pl.productLineId,
             recommendDate: pl.recommendDate,
             interviewStage: pl.interviewStage
-          };
-          
-          await CandidateProductLine.update(candidateProductLineData, {
+          }, {
             where: { id: pl.id, candidateId: candidate.id }
           });
-          
-          const interviewData = {
-            qualificationInterviewDate: pl.qualificationInterviewDate,
-            qualificationInterviewer: pl.qualificationInterviewer,
-            qualificationConclusion: pl.qualificationConclusion,
-            qualificationPassed: pl.qualificationPassed,
-            techInterview1Date: pl.techInterview1Date,
-            techInterview1Interviewer: pl.techInterview1Interviewer,
-            techInterview1Content: pl.techInterview1Content,
-            techInterview1Passed: pl.techInterview1Passed,
-            techInterview2Date: pl.techInterview2Date,
-            techInterview2Interviewer: pl.techInterview2Interviewer,
-            techInterview2Content: pl.techInterview2Content,
-            techInterview2Passed: pl.techInterview2Passed,
-            managerInterviewDate: pl.managerInterviewDate,
-            managerInterviewer: pl.managerInterviewer,
-            managerInterviewContent: pl.managerInterviewContent,
-            managerInterviewPassed: pl.managerInterviewPassed,
-            approvalDate: pl.approvalDate,
-            approver: pl.approver,
-            approvalRemark: pl.approvalRemark,
-            approvalPassed: pl.approvalPassed,
-            offerDate: pl.offerDate,
-            offerApprover: pl.offerApprover,
-            offerRemark: pl.offerRemark
-          };
-          
-          await Interview.upsert({
-            candidateProductLineId: pl.id,
-            ...interviewData
-          });
-          
+
+          if (pl.currentStage || pl.finalStatus) {
+            await Interview.update({
+              currentStage: pl.currentStage,
+              finalStatus: pl.finalStatus
+            }, {
+              where: { candidateProductLineId: pl.id }
+            });
+          }
+
           existingIds.delete(pl.id);
         } else {
           const newAssociation = await CandidateProductLine.create({
@@ -567,32 +348,11 @@ router.put('/:id', authenticate, async (req, res, next) => {
             interviewStage: pl.interviewStage || 'recommend_interview',
             recommendDate: pl.recommendDate
           });
-          
+
           await Interview.create({
             candidateProductLineId: newAssociation.id,
-            qualificationInterviewDate: pl.qualificationInterviewDate,
-            qualificationInterviewer: pl.qualificationInterviewer,
-            qualificationConclusion: pl.qualificationConclusion,
-            qualificationPassed: pl.qualificationPassed,
-            techInterview1Date: pl.techInterview1Date,
-            techInterview1Interviewer: pl.techInterview1Interviewer,
-            techInterview1Content: pl.techInterview1Content,
-            techInterview1Passed: pl.techInterview1Passed,
-            techInterview2Date: pl.techInterview2Date,
-            techInterview2Interviewer: pl.techInterview2Interviewer,
-            techInterview2Content: pl.techInterview2Content,
-            techInterview2Passed: pl.techInterview2Passed,
-            managerInterviewDate: pl.managerInterviewDate,
-            managerInterviewer: pl.managerInterviewer,
-            managerInterviewContent: pl.managerInterviewContent,
-            managerInterviewPassed: pl.managerInterviewPassed,
-            approvalDate: pl.approvalDate,
-            approver: pl.approver,
-            approvalRemark: pl.approvalRemark,
-            approvalPassed: pl.approvalPassed,
-            offerDate: pl.offerDate,
-            offerApprover: pl.offerApprover,
-            offerRemark: pl.offerRemark
+            currentStage: pl.currentStage || 'recommend_interview',
+            finalStatus: pl.finalStatus || 'pending'
           });
         }
       }
@@ -627,7 +387,7 @@ router.put('/:id', authenticate, async (req, res, next) => {
 
 router.put('/:id/advance', authenticate, async (req, res, next) => {
   try {
-    const { productLineId, entryDate, entryRemark } = req.body;
+    const { productLineId } = req.body;
 
     if (productLineId) {
       const candidateProductLine = await CandidateProductLine.findOne({
@@ -648,20 +408,51 @@ router.put('/:id/advance', authenticate, async (req, res, next) => {
 
       const nextStage = STAGES[currentIndex + 1];
       await candidateProductLine.update({ interviewStage: nextStage });
-      
+
+      const interview = await Interview.findOne({
+        where: { candidateProductLineId: candidateProductLine.id }
+      });
+
+      if (interview) {
+        await interview.update({ currentStage: nextStage });
+      }
+
       const candidate = await Candidate.findByPk(req.params.id);
-      if (nextStage === 'entry') {
-        const updateData = { currentStage: nextStage, lastOperatorId: req.user.id };
-        if (entryDate) updateData.entryDate = entryDate;
-        if (entryRemark) updateData.entryRemark = entryRemark;
-        await candidate.update(updateData);
-      } else {
-        await candidate.update({ currentStage: nextStage, lastOperatorId: req.user.id });
+      await candidate.update({ currentStage: nextStage, lastOperatorId: req.user.id });
+
+      if (nextStage === 'pending_onboarding') {
+        const passedProductLines = await CandidateProductLine.findAll({
+          where: { candidateId: candidate.id },
+          include: [{
+            model: Interview,
+            where: { finalStatus: 'passed' }
+          }]
+        });
+
+        if (passedProductLines.length > 0) {
+          for (const pl of passedProductLines) {
+            await Employee.findOrCreate({
+              where: {
+                candidateId: candidate.id,
+                productLineId: pl.productLineId
+              },
+              defaults: {
+                name: candidate.name,
+                email: candidate.email,
+                phone: candidate.phone,
+                gender: candidate.gender,
+                idCard: candidate.idCard,
+                currentStage: 'pending_onboarding',
+                lastOperatorId: req.user.id
+              }
+            });
+          }
+        }
       }
 
       res.json({
         message: 'Candidate advanced to next stage',
-        candidateProductLine
+        candidate
       });
     } else {
       const candidate = await Candidate.findByPk(req.params.id);
@@ -669,7 +460,7 @@ router.put('/:id/advance', authenticate, async (req, res, next) => {
         return res.status(404).json({ error: 'Candidate not found' });
       }
 
-      const currentIndex = STAGES.indexOf(candidate.currentStage || 'employee_entry');
+      const currentIndex = STAGES.indexOf(candidate.currentStage || 'candidate_entry');
       if (currentIndex === -1 || currentIndex >= STAGES.length - 1) {
         return res.status(400).json({ error: 'Candidate already at final stage' });
       }
@@ -679,6 +470,51 @@ router.put('/:id/advance', authenticate, async (req, res, next) => {
         currentStage: nextStage,
         lastOperatorId: req.user.id
       });
+
+      const candidateProductLines = await CandidateProductLine.findAll({
+        where: { candidateId: candidate.id }
+      });
+
+      for (const cpl of candidateProductLines) {
+        await cpl.update({ interviewStage: nextStage });
+        
+        const interview = await Interview.findOne({
+          where: { candidateProductLineId: cpl.id }
+        });
+        if (interview) {
+          await interview.update({ currentStage: nextStage });
+        }
+      }
+
+      if (nextStage === 'pending_onboarding') {
+        const passedProductLines = await CandidateProductLine.findAll({
+          where: { candidateId: candidate.id },
+          include: [{
+            model: Interview,
+            where: { finalStatus: 'passed' }
+          }]
+        });
+
+        if (passedProductLines.length > 0) {
+          for (const pl of passedProductLines) {
+            await Employee.findOrCreate({
+              where: {
+                candidateId: candidate.id,
+                productLineId: pl.productLineId
+              },
+              defaults: {
+                name: candidate.name,
+                email: candidate.email,
+                phone: candidate.phone,
+                gender: candidate.gender,
+                idCard: candidate.idCard,
+                currentStage: 'pending_onboarding',
+                lastOperatorId: req.user.id
+              }
+            });
+          }
+        }
+      }
 
       res.json({
         message: 'Candidate advanced to next stage',
@@ -713,7 +549,15 @@ router.put('/:id/rollback', authenticate, async (req, res, next) => {
 
       const prevStage = STAGES[currentIndex - 1];
       await candidateProductLine.update({ interviewStage: prevStage });
-      
+
+      const interview = await Interview.findOne({
+        where: { candidateProductLineId: candidateProductLine.id }
+      });
+
+      if (interview) {
+        await interview.update({ currentStage: prevStage });
+      }
+
       await Candidate.update(
         { lastOperatorId: req.user.id },
         { where: { id: req.params.id } }
@@ -729,7 +573,7 @@ router.put('/:id/rollback', authenticate, async (req, res, next) => {
         return res.status(404).json({ error: 'Candidate not found' });
       }
 
-      const currentIndex = STAGES.indexOf(candidate.currentStage || 'employee_entry');
+      const currentIndex = STAGES.indexOf(candidate.currentStage || 'candidate_entry');
       if (currentIndex <= 0) {
         return res.status(400).json({ error: 'Candidate already at first stage' });
       }
@@ -758,11 +602,6 @@ router.delete('/:id', authenticate, async (req, res, next) => {
       return res.status(404).json({ error: 'Candidate not found' });
     }
 
-    await Candidate.update(
-      { lastOperatorId: req.user.id },
-      { where: { id: candidate.id } }
-    );
-
     const associations = await CandidateProductLine.findAll({ where: { candidateId: candidate.id } });
     for (const assoc of associations) {
       await Interview.destroy({ where: { candidateProductLineId: assoc.id } });
@@ -784,7 +623,7 @@ router.get('/:id/can-recommend', authenticate, async (req, res, next) => {
       return res.status(404).json({ error: 'Candidate not found' });
     }
 
-    const blockedStages = ['recommend_interview', 'offer', 'entry', 'leave'];
+    const blockedStages = ['offer', 'pending_onboarding', 'entry', 'leave'];
     if (blockedStages.includes(candidate.currentStage)) {
       return res.json({ canRecommend: false, reason: '候选人当前阶段不允许面推' });
     }
@@ -809,26 +648,7 @@ router.get('/:id/can-recommend', authenticate, async (req, res, next) => {
     }
 
     const hasPassedRecord = existingAssociations.some(assoc => {
-      const stage = assoc.interviewStage;
-      
-      const interview = assoc.Interview;
-      if (!interview) return false;
-      
-      const stageOrder = ['qualification_interview', 'tech_interview_1', 'tech_interview_2', 'manager_interview', 'approval'];
-      const stageIndex = stageOrder.indexOf(stage);
-      
-      if (stageIndex === -1) return false;
-      
-      const passedFields = [
-        'qualificationPassed',
-        'techInterview1Passed',
-        'techInterview2Passed',
-        'managerInterviewPassed',
-        'approvalPassed'
-      ];
-      
-      const currentPassedField = passedFields[stageIndex];
-      return interview[currentPassedField] === true;
+      return assoc.Interview && assoc.Interview.finalStatus === 'passed';
     });
 
     if (hasPassedRecord) {
@@ -843,12 +663,12 @@ router.get('/:id/can-recommend', authenticate, async (req, res, next) => {
         name: pl.name,
         clientOwner: pl.clientOwner
       }));
-    
+
     if (availableProductLines.length === 0) {
       return res.json({ canRecommend: false, reason: '所有产品线都已有面试记录' });
     }
-    
-    return res.json({ canRecommend: true, reason: '所有面试记录未通过，可以面推到其他产品线', availableProductLines });
+
+    return res.json({ canRecommend: true, reason: '可以面推到其他产品线', availableProductLines });
   } catch (error) {
     next(error);
   }
@@ -886,7 +706,7 @@ router.get('/:id/available-product-lines', authenticate, async (req, res, next) 
 router.post('/:id/push-interview', authenticate, async (req, res, next) => {
   const { sequelize } = require('../models');
   const transaction = await sequelize.transaction();
-  
+
   try {
     const { productLineId, recommendDate } = req.body;
 
@@ -931,7 +751,9 @@ router.post('/:id/push-interview', authenticate, async (req, res, next) => {
     }, { transaction });
 
     await Interview.create({
-      candidateProductLineId: newAssociation.id
+      candidateProductLineId: newAssociation.id,
+      currentStage: 'recommend_interview',
+      finalStatus: 'pending'
     }, { transaction });
 
     await candidate.update({

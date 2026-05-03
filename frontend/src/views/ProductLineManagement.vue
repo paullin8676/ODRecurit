@@ -119,7 +119,6 @@ const fetchUsers = async () => {
     const data = await userApi.getAll()
     users.value = data.users
   } catch (error) {
-    console.error('Failed to fetch users:', error)
   }
 }
 

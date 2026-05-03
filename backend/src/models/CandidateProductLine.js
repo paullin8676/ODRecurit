@@ -1,7 +1,5 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
-const Candidate = require('./Candidate');
-const ProductLine = require('./ProductLine');
 
 const CandidateProductLine = sequelize.define('CandidateProductLine', {
   id: {
@@ -34,29 +32,12 @@ const CandidateProductLine = sequelize.define('CandidateProductLine', {
     allowNull: true,
     defaultValue: 'recommend_interview'
   }
+}, {
+  tableName: 'CandidateProductLine',
+  timestamps: true,
+  underscored: true
 });
 
-// Define associations
-Candidate.belongsToMany(ProductLine, {
-  through: CandidateProductLine,
-  as: 'productLines',
-  foreignKey: 'candidateId',
-  otherKey: 'productLineId'
-});
-
-ProductLine.belongsToMany(Candidate, {
-  through: CandidateProductLine,
-  as: 'candidates',
-  foreignKey: 'productLineId',
-  otherKey: 'candidateId'
-});
-
-// Additional associations for the join table
-CandidateProductLine.belongsTo(Candidate, { foreignKey: 'candidateId' });
-CandidateProductLine.belongsTo(ProductLine, { foreignKey: 'productLineId' });
-CandidateProductLine.hasOne(require('./Interview'), { foreignKey: 'candidateProductLineId' });
-
-// Add unique constraint to ensure only one record per candidate per product line
 CandidateProductLine.addHook('beforeCreate', async (candidateProductLine) => {
   const existingRecord = await CandidateProductLine.findOne({
     where: {

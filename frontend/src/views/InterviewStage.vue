@@ -12,7 +12,7 @@
         <el-form-item label="阶段">
           <el-select v-model="searchForm.currentStage" placeholder="请选择阶段" clearable @change="handleSearch" style="width: auto; min-width: 120px">
             <el-option
-              v-for="(name, key) in stageNames"
+              v-for="(name, key) in filteredStageNames"
               :key="key"
               :label="name"
               :value="key"
@@ -30,7 +30,6 @@
         </el-table-column>
         <el-table-column prop="phone" label="手机号" width="130" />
         <el-table-column prop="email" label="邮箱" width="180" />
-        <el-table-column prop="idCard" label="身份证号" width="180" />
         <el-table-column label="当前阶段" width="120">
           <template #default="{ row }">
             {{ row.currentStage ? stageNames[row.currentStage] : '-' }}
@@ -44,77 +43,84 @@
         </el-table-column>
         <el-table-column label="推荐日期" width="120">
           <template #default="{ row }">
-            {{ row.productLine?.through?.recommendDate ? new Date(row.productLine.through.recommendDate).toLocaleDateString() : '-' }}
+            {{ getRoundDate(row, 'recommend_interview') ? new Date(getRoundDate(row, 'recommend_interview')).toLocaleDateString() : '-' }}
           </template>
         </el-table-column>
         <el-table-column label="资面日期" width="120">
           <template #default="{ row }">
-            {{ row.productLine?.through?.qualificationInterviewDate ? new Date(row.productLine.through.qualificationInterviewDate).toLocaleDateString() : '-' }}
+            {{ getRoundDate(row, 'qualification_interview') ? new Date(getRoundDate(row, 'qualification_interview')).toLocaleDateString() : '-' }}
           </template>
         </el-table-column>
         <el-table-column label="资面结果" width="100">
           <template #default="{ row }">
-            <span v-if="row.productLine?.through?.qualificationPassed === true" style="color: green;">通过</span>
-            <span v-else-if="row.productLine?.through?.qualificationPassed === false" style="color: red;">不通过</span>
+            <span v-if="getRoundPassed(row, 'qualification_interview') === true" style="color: green;">通过</span>
+            <span v-else-if="getRoundPassed(row, 'qualification_interview') === false" style="color: red;">未通过</span>
             <span v-else>-</span>
           </template>
         </el-table-column>
         <el-table-column label="技一日期" width="120">
           <template #default="{ row }">
-            {{ row.productLine?.through?.techInterview1Date ? new Date(row.productLine.through.techInterview1Date).toLocaleDateString() : '-' }}
+            {{ getRoundDate(row, 'tech_interview_1') ? new Date(getRoundDate(row, 'tech_interview_1')).toLocaleDateString() : '-' }}
           </template>
         </el-table-column>
         <el-table-column label="技一结果" width="100">
           <template #default="{ row }">
-            <span v-if="row.productLine?.through?.techInterview1Passed === true" style="color: green;">通过</span>
-            <span v-else-if="row.productLine?.through?.techInterview1Passed === false" style="color: red;">不通过</span>
+            <span v-if="getRoundPassed(row, 'tech_interview_1') === true" style="color: green;">通过</span>
+            <span v-else-if="getRoundPassed(row, 'tech_interview_1') === false" style="color: red;">未通过</span>
             <span v-else>-</span>
           </template>
         </el-table-column>
         <el-table-column label="技二日期" width="120">
           <template #default="{ row }">
-            {{ row.productLine?.through?.techInterview2Date ? new Date(row.productLine.through.techInterview2Date).toLocaleDateString() : '-' }}
+            {{ getRoundDate(row, 'tech_interview_2') ? new Date(getRoundDate(row, 'tech_interview_2')).toLocaleDateString() : '-' }}
           </template>
         </el-table-column>
         <el-table-column label="技二结果" width="100">
           <template #default="{ row }">
-            <span v-if="row.productLine?.through?.techInterview2Passed === true" style="color: green;">通过</span>
-            <span v-else-if="row.productLine?.through?.techInterview2Passed === false" style="color: red;">不通过</span>
+            <span v-if="getRoundPassed(row, 'tech_interview_2') === true" style="color: green;">通过</span>
+            <span v-else-if="getRoundPassed(row, 'tech_interview_2') === false" style="color: red;">未通过</span>
             <span v-else>-</span>
           </template>
         </el-table-column>
         <el-table-column label="主面日期" width="120">
           <template #default="{ row }">
-            {{ row.productLine?.through?.managerInterviewDate ? new Date(row.productLine.through.managerInterviewDate).toLocaleDateString() : '-' }}
+            {{ getRoundDate(row, 'manager_interview') ? new Date(getRoundDate(row, 'manager_interview')).toLocaleDateString() : '-' }}
           </template>
         </el-table-column>
         <el-table-column label="主面结果" width="100">
           <template #default="{ row }">
-            <span v-if="row.productLine?.through?.managerInterviewPassed === true" style="color: green;">通过</span>
-            <span v-else-if="row.productLine?.through?.managerInterviewPassed === false" style="color: red;">不通过</span>
+            <span v-if="getRoundPassed(row, 'manager_interview') === true" style="color: green;">通过</span>
+            <span v-else-if="getRoundPassed(row, 'manager_interview') === false" style="color: red;">未通过</span>
             <span v-else>-</span>
           </template>
         </el-table-column>
         <el-table-column label="审批日期" width="120">
           <template #default="{ row }">
-            {{ row.productLine?.through?.approvalDate ? new Date(row.productLine.through.approvalDate).toLocaleDateString() : '-' }}
+            {{ getRoundDate(row, 'approval') ? new Date(getRoundDate(row, 'approval')).toLocaleDateString() : '-' }}
           </template>
         </el-table-column>
         <el-table-column label="审批结果" width="100">
           <template #default="{ row }">
-            <span v-if="row.productLine?.through?.approvalPassed === true" style="color: green;">通过</span>
-            <span v-else-if="row.productLine?.through?.approvalPassed === false" style="color: red;">不通过</span>
+            <span v-if="getRoundPassed(row, 'approval') === true" style="color: green;">通过</span>
+            <span v-else-if="getRoundPassed(row, 'approval') === false" style="color: red;">未通过</span>
             <span v-else>-</span>
           </template>
         </el-table-column>
         <el-table-column label="Offer日期" width="120">
           <template #default="{ row }">
-            {{ row.productLine?.through?.offerDate ? new Date(row.productLine.through.offerDate).toLocaleDateString() : '-' }}
+            {{ getRoundDate(row, 'offer') ? new Date(getRoundDate(row, 'offer')).toLocaleDateString() : '-' }}
           </template>
         </el-table-column>
         <el-table-column label="Offer审批人" width="120" show-overflow-tooltip>
           <template #default="{ row }">
-            {{ row.productLine?.through?.offerApprover || '-' }}
+            {{ (row.roundsMap && row.roundsMap['offer']?.interviewer) || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="Offer结果" width="100">
+          <template #default="{ row }">
+            <span v-if="getRoundPassed(row, 'offer') === true" style="color: green;">通过</span>
+            <span v-else-if="getRoundPassed(row, 'offer') === false" style="color: red;">未通过</span>
+            <span v-else>-</span>
           </template>
         </el-table-column>
         <el-table-column label="入职日期" width="120">
@@ -127,7 +133,7 @@
             <el-button type="info" link size="small" @click="handleView(row)">
               查看
             </el-button>
-            <template v-if="row.candidateCurrentStage !== 'entry' && isCurrentStage(row.currentStage) && row.currentStage !== 'entry'">
+            <template v-if="row.candidateCurrentStage !== 'entry' && isCurrentStage(row.currentStage) && row.currentStage !== 'entry' && row.finalStatus === 'pending'">
               <el-button type="primary" link size="small" @click="handleEdit(row)">
                 编辑
               </el-button>
@@ -223,7 +229,7 @@
                     <span>推荐日期</span>
                     <span style="color: #F56C6C; margin-left: 4px;">*</span>
                   </template>
-                  <el-date-picker v-model="interviewForm.recommendDate" type="date" style="width: 100%" :disabled="!canEditCurrentStage('recommend_interview')" />
+                  <el-date-picker v-model="interviewForm.rounds['recommend_interview'].scheduledDate" type="date" style="width: 100%" :disabled="!canEditCurrentStage('recommend_interview')" />
                 </el-form-item>
               </el-col>
             </el-row>
@@ -240,7 +246,7 @@
                     <span>资面日期</span>
                     <span style="color: #F56C6C; margin-left: 4px;">*</span>
                   </template>
-                  <el-date-picker v-model="interviewForm.qualificationInterviewDate" type="date" style="width: 100%" :disabled="!canEditCurrentStage('qualification_interview')" />
+                  <el-date-picker v-model="interviewForm.rounds['qualification_interview'].scheduledDate" type="date" style="width: 100%" :disabled="!canEditCurrentStage('qualification_interview')" />
                 </el-form-item>
               </el-col>
               <el-col :span="12">
@@ -249,19 +255,19 @@
                     <span>资面顾问</span>
                     <span style="color: #F56C6C; margin-left: 4px;">*</span>
                   </template>
-                  <el-input v-model="interviewForm.qualificationInterviewer" :disabled="!canEditCurrentStage('qualification_interview')" />
+                  <el-input v-model="interviewForm.rounds['qualification_interview'].interviewer" :disabled="!canEditCurrentStage('qualification_interview')" />
                 </el-form-item>
               </el-col>
             </el-row>
             <el-form-item label="资面结论">
-              <el-input v-model="interviewForm.qualificationConclusion" type="textarea" :rows="3" :disabled="!canEditCurrentStage('qualification_interview')" />
+              <el-input v-model="interviewForm.rounds['qualification_interview'].content" type="textarea" :rows="3" :disabled="!canEditCurrentStage('qualification_interview')" />
             </el-form-item>
             <el-form-item>
               <template #label>
                 <span>是否通过</span>
                 <span style="color: #F56C6C; margin-left: 4px;">*</span>
               </template>
-              <el-radio-group v-model="interviewForm.qualificationPassed" :disabled="!canEditCurrentStage('qualification_interview')">
+              <el-radio-group v-model="interviewForm.rounds['qualification_interview'].passed" :disabled="!canEditCurrentStage('qualification_interview')">
                 <el-radio :value="true">通过</el-radio>
                 <el-radio :value="false">未通过</el-radio>
               </el-radio-group>
@@ -279,7 +285,7 @@
                     <span>技面日期</span>
                     <span style="color: #F56C6C; margin-left: 4px;">*</span>
                   </template>
-                  <el-date-picker v-model="interviewForm.techInterview1Date" type="date" style="width: 100%" :disabled="!canEditCurrentStage('tech_interview_1')" />
+                  <el-date-picker v-model="interviewForm.rounds['tech_interview_1'].scheduledDate" type="date" style="width: 100%" :disabled="!canEditCurrentStage('tech_interview_1')" />
                 </el-form-item>
               </el-col>
               <el-col :span="12">
@@ -288,19 +294,19 @@
                     <span>面试官</span>
                     <span style="color: #F56C6C; margin-left: 4px;">*</span>
                   </template>
-                  <el-input v-model="interviewForm.techInterview1Interviewer" :disabled="!canEditCurrentStage('tech_interview_1')" />
+                  <el-input v-model="interviewForm.rounds['tech_interview_1'].interviewer" :disabled="!canEditCurrentStage('tech_interview_1')" />
                 </el-form-item>
               </el-col>
             </el-row>
             <el-form-item label="评价内容">
-              <el-input v-model="interviewForm.techInterview1Content" type="textarea" :rows="3" :disabled="!canEditCurrentStage('tech_interview_1')" />
+              <el-input v-model="interviewForm.rounds['tech_interview_1'].content" type="textarea" :rows="3" :disabled="!canEditCurrentStage('tech_interview_1')" />
             </el-form-item>
             <el-form-item>
               <template #label>
                 <span>是否通过</span>
                 <span style="color: #F56C6C; margin-left: 4px;">*</span>
               </template>
-              <el-radio-group v-model="interviewForm.techInterview1Passed" :disabled="!canEditCurrentStage('tech_interview_1')">
+              <el-radio-group v-model="interviewForm.rounds['tech_interview_1'].passed" :disabled="!canEditCurrentStage('tech_interview_1')">
                 <el-radio :value="true">通过</el-radio>
                 <el-radio :value="false">未通过</el-radio>
               </el-radio-group>
@@ -318,7 +324,7 @@
                     <span>技面日期</span>
                     <span style="color: #F56C6C; margin-left: 4px;">*</span>
                   </template>
-                  <el-date-picker v-model="interviewForm.techInterview2Date" type="date" style="width: 100%" :disabled="!canEditCurrentStage('tech_interview_2')" />
+                  <el-date-picker v-model="interviewForm.rounds['tech_interview_2'].scheduledDate" type="date" style="width: 100%" :disabled="!canEditCurrentStage('tech_interview_2')" />
                 </el-form-item>
               </el-col>
               <el-col :span="12">
@@ -327,19 +333,19 @@
                     <span>面试官</span>
                     <span style="color: #F56C6C; margin-left: 4px;">*</span>
                   </template>
-                  <el-input v-model="interviewForm.techInterview2Interviewer" :disabled="!canEditCurrentStage('tech_interview_2')" />
+                  <el-input v-model="interviewForm.rounds['tech_interview_2'].interviewer" :disabled="!canEditCurrentStage('tech_interview_2')" />
                 </el-form-item>
               </el-col>
             </el-row>
             <el-form-item label="评价内容">
-              <el-input v-model="interviewForm.techInterview2Content" type="textarea" :rows="3" :disabled="!canEditCurrentStage('tech_interview_2')" />
+              <el-input v-model="interviewForm.rounds['tech_interview_2'].content" type="textarea" :rows="3" :disabled="!canEditCurrentStage('tech_interview_2')" />
             </el-form-item>
             <el-form-item>
               <template #label>
                 <span>是否通过</span>
                 <span style="color: #F56C6C; margin-left: 4px;">*</span>
               </template>
-              <el-radio-group v-model="interviewForm.techInterview2Passed" :disabled="!canEditCurrentStage('tech_interview_2')">
+              <el-radio-group v-model="interviewForm.rounds['tech_interview_2'].passed" :disabled="!canEditCurrentStage('tech_interview_2')">
                 <el-radio :value="true">通过</el-radio>
                 <el-radio :value="false">未通过</el-radio>
               </el-radio-group>
@@ -357,7 +363,7 @@
                     <span>综面日期</span>
                     <span style="color: #F56C6C; margin-left: 4px;">*</span>
                   </template>
-                  <el-date-picker v-model="interviewForm.managerInterviewDate" type="date" style="width: 100%" :disabled="!canEditCurrentStage('manager_interview')" />
+                  <el-date-picker v-model="interviewForm.rounds['manager_interview'].scheduledDate" type="date" style="width: 100%" :disabled="!canEditCurrentStage('manager_interview')" />
                 </el-form-item>
               </el-col>
               <el-col :span="12">
@@ -366,19 +372,19 @@
                     <span>主考官</span>
                     <span style="color: #F56C6C; margin-left: 4px;">*</span>
                   </template>
-                  <el-input v-model="interviewForm.managerInterviewer" :disabled="!canEditCurrentStage('manager_interview')" />
+                  <el-input v-model="interviewForm.rounds['manager_interview'].interviewer" :disabled="!canEditCurrentStage('manager_interview')" />
                 </el-form-item>
               </el-col>
             </el-row>
             <el-form-item label="评价内容">
-              <el-input v-model="interviewForm.managerInterviewContent" type="textarea" :rows="3" :disabled="!canEditCurrentStage('manager_interview')" />
+              <el-input v-model="interviewForm.rounds['manager_interview'].content" type="textarea" :rows="3" :disabled="!canEditCurrentStage('manager_interview')" />
             </el-form-item>
             <el-form-item>
               <template #label>
                 <span>是否通过</span>
                 <span style="color: #F56C6C; margin-left: 4px;">*</span>
               </template>
-              <el-radio-group v-model="interviewForm.managerInterviewPassed" :disabled="!canEditCurrentStage('manager_interview')">
+              <el-radio-group v-model="interviewForm.rounds['manager_interview'].passed" :disabled="!canEditCurrentStage('manager_interview')">
                 <el-radio :value="true">通过</el-radio>
                 <el-radio :value="false">未通过</el-radio>
               </el-radio-group>
@@ -396,7 +402,7 @@
                     <span>审批日期</span>
                     <span style="color: #F56C6C; margin-left: 4px;">*</span>
                   </template>
-                  <el-date-picker v-model="interviewForm.approvalDate" type="date" style="width: 100%" :disabled="!canEditCurrentStage('approval')" />
+                  <el-date-picker v-model="interviewForm.rounds['approval'].scheduledDate" type="date" style="width: 100%" :disabled="!canEditCurrentStage('approval')" />
                 </el-form-item>
               </el-col>
               <el-col :span="12">
@@ -405,19 +411,19 @@
                     <span>审批人</span>
                     <span style="color: #F56C6C; margin-left: 4px;">*</span>
                   </template>
-                  <el-input v-model="interviewForm.approver" :disabled="!canEditCurrentStage('approval')" />
+                  <el-input v-model="interviewForm.rounds['approval'].interviewer" :disabled="!canEditCurrentStage('approval')" />
                 </el-form-item>
               </el-col>
             </el-row>
             <el-form-item label="审批备注">
-              <el-input v-model="interviewForm.approvalRemark" type="textarea" :rows="3" :disabled="!canEditCurrentStage('approval')" />
+              <el-input v-model="interviewForm.rounds['approval'].content" type="textarea" :rows="3" :disabled="!canEditCurrentStage('approval')" />
             </el-form-item>
             <el-form-item>
               <template #label>
                 <span>是否通过</span>
                 <span style="color: #F56C6C; margin-left: 4px;">*</span>
               </template>
-              <el-radio-group v-model="interviewForm.approvalPassed" :disabled="!canEditCurrentStage('approval')">
+              <el-radio-group v-model="interviewForm.rounds['approval'].passed" :disabled="!canEditCurrentStage('approval')">
                 <el-radio :value="true">通过</el-radio>
                 <el-radio :value="false">未通过</el-radio>
               </el-radio-group>
@@ -435,7 +441,7 @@
                     <span>Offer日期</span>
                     <span style="color: #F56C6C; margin-left: 4px;">*</span>
                   </template>
-                  <el-date-picker v-model="interviewForm.offerDate" type="date" style="width: 100%" :disabled="!canEditCurrentStage('offer')" />
+                  <el-date-picker v-model="interviewForm.rounds['offer'].scheduledDate" type="date" style="width: 100%" :disabled="!canEditCurrentStage('offer')" />
                 </el-form-item>
               </el-col>
               <el-col :span="12">
@@ -444,12 +450,22 @@
                     <span>审批人</span>
                     <span style="color: #F56C6C; margin-left: 4px;">*</span>
                   </template>
-                  <el-input v-model="interviewForm.offerApprover" :disabled="!canEditCurrentStage('offer')" />
+                  <el-input v-model="interviewForm.rounds['offer'].interviewer" :disabled="!canEditCurrentStage('offer')" />
                 </el-form-item>
               </el-col>
             </el-row>
             <el-form-item label="Offer备注">
-              <el-input v-model="interviewForm.offerRemark" type="textarea" :rows="3" :disabled="!canEditCurrentStage('offer')" />
+              <el-input v-model="interviewForm.rounds['offer'].content" type="textarea" :rows="3" :disabled="!canEditCurrentStage('offer')" />
+            </el-form-item>
+            <el-form-item>
+              <template #label>
+                <span>是否通过</span>
+                <span style="color: #F56C6C; margin-left: 4px;">*</span>
+              </template>
+              <el-radio-group v-model="interviewForm.rounds['offer'].passed" :disabled="!canEditCurrentStage('offer')">
+                <el-radio :value="true">通过</el-radio>
+                <el-radio :value="false">未通过</el-radio>
+              </el-radio-group>
             </el-form-item>
           </el-form>
         </template>
@@ -484,8 +500,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { candidateApi, productLineApi, stageConfigApi } from '../api'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { candidateApi, productLineApi, stageConfigApi, interviewApi } from '../api'
 import { ElMessage } from 'element-plus'
 
 const stageNames = {
@@ -501,6 +517,7 @@ const stageNames = {
   manager_interview: '主管面试',
   approval: '租用审批',
   offer: 'Offer',
+  pending_onboarding: '待入职',
   entry: '入职',
   leave: '离职'
 }
@@ -518,8 +535,20 @@ const stageOrder = [
   'manager_interview',
   'approval',
   'offer',
+  'pending_onboarding',
   'entry',
   'leave'
+]
+
+const INTERVIEW_STAGES = [
+  'recommend_interview',
+  'qualification_interview',
+  'tech_interview_1',
+  'tech_interview_2',
+  'manager_interview',
+  'approval',
+  'offer',
+  'pending_onboarding'
 ]
 
 const employees = ref([])
@@ -529,6 +558,7 @@ const dialogTitle = ref('查看面试信息')
 const submitLoading = ref(false)
 const selectedEmployee = ref(null)
 const selectedProductLine = ref(null)
+const selectedInterview = ref(null)
 const productLines = ref([])
 const isEditMode = ref(false)
 
@@ -545,6 +575,16 @@ const pagination = reactive({
 
 const availableStages = ref([])
 
+const filteredStageNames = computed(() => {
+  const filtered = {}
+  Object.keys(stageNames).forEach(key => {
+    if (availableStages.value.includes(key)) {
+      filtered[key] = stageNames[key]
+    }
+  })
+  return filtered
+})
+
 const entryDialogVisible = ref(false)
 const entryForm = reactive({
   entryDate: null,
@@ -552,32 +592,29 @@ const entryForm = reactive({
 })
 const employeeToAdvance = ref(null)
 
-const interviewForm = reactive({
-  recommendDate: null,
-  qualificationInterviewDate: null,
-  qualificationInterviewer: '',
-  qualificationConclusion: '',
-  qualificationPassed: null,
-  techInterview1Date: null,
-  techInterview1Interviewer: '',
-  techInterview1Content: '',
-  techInterview1Passed: null,
-  techInterview2Date: null,
-  techInterview2Interviewer: '',
-  techInterview2Content: '',
-  techInterview2Passed: null,
-  managerInterviewDate: null,
-  managerInterviewer: '',
-  managerInterviewContent: '',
-  managerInterviewPassed: null,
-  approvalDate: null,
-  approver: '',
-  approvalRemark: '',
-  approvalPassed: null,
-  offerDate: null,
-  offerApprover: '',
-  offerRemark: ''
-})
+const initInterviewForm = () => {
+  const form = {
+    currentStage: 'recommend_interview',
+    finalStatus: 'pending',
+    rounds: {}
+  }
+  
+  INTERVIEW_STAGES.forEach((stage, index) => {
+    form.rounds[stage] = {
+      stageCode: stage,
+      stageIndex: index,
+      scheduledDate: null,
+      interviewer: '',
+      content: '',
+      passed: null,
+      completedAt: null
+    }
+  })
+  
+  return form
+}
+
+const interviewForm = reactive(initInterviewForm())
 
 const fetchStageConfig = async () => {
   try {
@@ -588,7 +625,6 @@ const fetchStageConfig = async () => {
       availableStages.value = Object.keys(stageNames)
     }
   } catch (error) {
-    console.error('Failed to fetch stage config:', error)
     availableStages.value = Object.keys(stageNames)
   }
 }
@@ -597,31 +633,37 @@ const fetchEmployees = async () => {
   loading.value = true
   try {
     const params = {
-      page: pagination.page,
-      pageSize: pagination.pageSize,
-      ...searchForm
+      currentStage: searchForm.currentStage || undefined,
+      name: searchForm.name || undefined
     }
-    const data = await candidateApi.getAll(params)
+    const data = await interviewApi.getAll(params)
     
     const flattenedEmployees = []
-    data.candidates.forEach(candidate => {
-      if (candidate.productLines && candidate.productLines.length > 0) {
-        candidate.productLines.forEach(productLine => {
+    if (data.interviews && data.interviews.length > 0) {
+      data.interviews.forEach(interview => {
+        const candidate = interview.Candidate
+        const productLine = interview.productLine
+        const recommendDate = interview.recommendDate
+        
+        if (candidate && productLine) {
           flattenedEmployees.push({
             ...candidate,
+            ...interview,
             productLine: productLine,
             productLineName: productLine.name,
-            currentStage: productLine.through.interviewStage,
-            candidateCurrentStage: candidate.currentStage
+            currentStage: interview.currentStage,
+            candidateCurrentStage: candidate.currentStage,
+            recommendDate: recommendDate,
+            rounds: interview.rounds || [],
+            roundsMap: interview.roundsMap || {}
           })
-        })
-      }
-    })
+        }
+      })
+    }
     
     employees.value = flattenedEmployees
-    pagination.total = data.pagination?.total || flattenedEmployees.length
+    pagination.total = flattenedEmployees.length
   } catch (error) {
-    console.error('Failed to fetch employees:', error)
   } finally {
     loading.value = false
   }
@@ -632,8 +674,21 @@ const fetchProductLines = async () => {
     const data = await productLineApi.getAll()
     productLines.value = data.productLines || []
   } catch (error) {
-    console.error('Failed to fetch product lines:', error)
   }
+}
+
+const getRoundDate = (row, stageCode) => {
+  if (row.roundsMap && row.roundsMap[stageCode]) {
+    return row.roundsMap[stageCode].scheduledDate
+  }
+  return null
+}
+
+const getRoundPassed = (row, stageCode) => {
+  if (row.roundsMap && row.roundsMap[stageCode]) {
+    return row.roundsMap[stageCode].passed
+  }
+  return null
 }
 
 const handleSearch = () => {
@@ -677,69 +732,36 @@ const openDetailDialog = async (row) => {
       return
     }
     
-    const data = await candidateApi.getById(row.id)
-    if (!data || !data.candidate) {
-      ElMessage.error('获取员工信息失败')
-      return
+    selectedEmployee.value = {
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      phone: row.phone,
+      gender: row.gender,
+      idCard: row.idCard,
+      currentStage: row.candidateCurrentStage
     }
-    
-    selectedEmployee.value = data.candidate
     selectedProductLine.value = row.productLine
+    selectedInterview.value = row
     
-    if (row.productLine && row.productLine.through) {
-      const through = row.productLine.through
-      Object.assign(interviewForm, {
-        recommendDate: through.recommendDate || null,
-        qualificationInterviewDate: through.qualificationInterviewDate || null,
-        qualificationInterviewer: through.qualificationInterviewer || '',
-        qualificationConclusion: through.qualificationConclusion || '',
-        qualificationPassed: through.qualificationPassed !== undefined ? through.qualificationPassed : null,
-        techInterview1Date: through.techInterview1Date || null,
-        techInterview1Interviewer: through.techInterview1Interviewer || '',
-        techInterview1Content: through.techInterview1Content || '',
-        techInterview1Passed: through.techInterview1Passed !== undefined ? through.techInterview1Passed : null,
-        techInterview2Date: through.techInterview2Date || null,
-        techInterview2Interviewer: through.techInterview2Interviewer || '',
-        techInterview2Content: through.techInterview2Content || '',
-        techInterview2Passed: through.techInterview2Passed !== undefined ? through.techInterview2Passed : null,
-        managerInterviewDate: through.managerInterviewDate || null,
-        managerInterviewer: through.managerInterviewer || '',
-        managerInterviewContent: through.managerInterviewContent || '',
-        managerInterviewPassed: through.managerInterviewPassed !== undefined ? through.managerInterviewPassed : null,
-        approvalDate: through.approvalDate || null,
-        approver: through.approver || '',
-        approvalRemark: through.approvalRemark || '',
-        approvalPassed: through.approvalPassed !== undefined ? through.approvalPassed : null,
-        offerDate: through.offerDate || null,
-        offerApprover: through.offerApprover || '',
-        offerRemark: through.offerRemark || ''
-      })
-    } else {
-      Object.assign(interviewForm, {
-        recommendDate: null,
-        qualificationInterviewDate: null,
-        qualificationInterviewer: '',
-        qualificationConclusion: '',
-        qualificationPassed: null,
-        techInterview1Date: null,
-        techInterview1Interviewer: '',
-        techInterview1Content: '',
-        techInterview1Passed: null,
-        techInterview2Date: null,
-        techInterview2Interviewer: '',
-        techInterview2Content: '',
-        techInterview2Passed: null,
-        managerInterviewDate: null,
-        managerInterviewer: '',
-        managerInterviewContent: '',
-        managerInterviewPassed: null,
-        approvalDate: null,
-        approver: '',
-        approvalRemark: '',
-        approvalPassed: null,
-        offerDate: null,
-        offerApprover: '',
-        offerRemark: ''
+    Object.assign(interviewForm, initInterviewForm())
+    
+    Object.assign(interviewForm, {
+      currentStage: row.currentStage,
+      finalStatus: row.finalStatus
+    })
+    
+    if (row.rounds && row.rounds.length > 0) {
+      row.rounds.forEach(round => {
+        if (interviewForm.rounds[round.stageCode]) {
+          Object.assign(interviewForm.rounds[round.stageCode], {
+            scheduledDate: round.scheduledDate,
+            interviewer: round.interviewer,
+            content: round.content,
+            passed: round.passed,
+            completedAt: round.completedAt
+          })
+        }
       })
     }
     
@@ -749,7 +771,6 @@ const openDetailDialog = async (row) => {
       ElMessage.error('获取员工信息失败，请确保员工已关联产品线')
     }
   } catch (error) {
-    console.error('Error in openDetailDialog:', error)
     ElMessage.error('获取员工信息失败')
   }
 }
@@ -759,11 +780,11 @@ const isCurrentStage = (stage) => {
 }
 
 const shouldShowStage = (stage) => {
-  if (!selectedProductLine.value || !selectedProductLine.value.through) {
+  if (!selectedInterview.value) {
     return false
   }
   
-  const currentStage = selectedProductLine.value.through.interviewStage
+  const currentStage = selectedInterview.value.currentStage
   const currentIndex = stageOrder.indexOf(currentStage)
   const targetIndex = stageOrder.indexOf(stage)
   
@@ -774,39 +795,48 @@ const canEditCurrentStage = (stage) => {
   if (!isEditMode.value) {
     return false
   }
-  
-  if (!selectedProductLine.value || !selectedProductLine.value.through) {
+
+  if (!selectedInterview.value) {
     return false
   }
-  
-  const currentStage = selectedProductLine.value.through.interviewStage
+
+  const currentStage = selectedInterview.value.currentStage
+  const finalStatus = selectedInterview.value.finalStatus
+
+  if (finalStatus === 'pending' && currentStage === 'recommend_interview' && stage === 'recommend_interview') {
+    return true
+  }
+
+  if (finalStatus !== 'pending') {
+    return false
+  }
+
   const currentIndex = stageOrder.indexOf(currentStage)
   const targetIndex = stageOrder.indexOf(stage)
-  
+
   return targetIndex === currentIndex
 }
 
 const canAdvance = (row) => {
-  const through = row.productLine?.through
-  if (!through) return false
-
   const currentStage = row.currentStage
 
   switch (currentStage) {
     case 'recommend_interview':
-      return true
+      return getRoundDate(row, 'recommend_interview') !== null
     case 'qualification_interview':
-      return through.qualificationInterviewDate && through.qualificationPassed === true
+      return getRoundDate(row, 'qualification_interview') && getRoundPassed(row, 'qualification_interview') === true
     case 'tech_interview_1':
-      return through.techInterview1Date && through.techInterview1Passed === true
+      return getRoundDate(row, 'tech_interview_1') && getRoundPassed(row, 'tech_interview_1') === true
     case 'tech_interview_2':
-      return through.techInterview2Date && through.techInterview2Passed === true
+      return getRoundDate(row, 'tech_interview_2') && getRoundPassed(row, 'tech_interview_2') === true
     case 'manager_interview':
-      return through.managerInterviewDate && through.managerInterviewPassed === true
+      return getRoundDate(row, 'manager_interview') && getRoundPassed(row, 'manager_interview') === true
     case 'approval':
-      return through.approvalDate && through.approvalPassed === true
+      return getRoundDate(row, 'approval') && getRoundPassed(row, 'approval') === true
     case 'offer':
-      return through.offerDate
+      return getRoundDate(row, 'offer') && getRoundPassed(row, 'offer') === true
+    case 'pending_onboarding':
+      return true
     case 'entry':
       return false
     case 'leave':
@@ -817,18 +847,17 @@ const canAdvance = (row) => {
 }
 
 const handleAdvance = async (row) => {
-  if (row.currentStage === 'offer') {
+  if (row.currentStage === 'offer' || row.currentStage === 'pending_onboarding') {
     employeeToAdvance.value = row
     entryForm.entryDate = null
     entryForm.entryRemark = ''
     entryDialogVisible.value = true
   } else {
     try {
-      await candidateApi.advance(row.id, { productLineId: row.productLine.id })
+      await interviewApi.advance(row.id)
       ElMessage.success('推进成功')
       fetchEmployees()
     } catch (error) {
-      console.error('Error in handleAdvance:', error)
       ElMessage.error('推进失败')
     }
   }
@@ -857,77 +886,43 @@ const handleEntrySubmit = async () => {
     employeeToAdvance.value = null
     fetchEmployees()
   } catch (error) {
-    console.error('Error in handleEntrySubmit:', error)
     ElMessage.error('推进失败')
   }
 }
 
 const handleSubmit = async () => {
-  if (!selectedEmployee.value || !selectedProductLine.value) {
+  if (!selectedEmployee.value || !selectedProductLine.value || !selectedInterview.value) {
     ElMessage.error('请选择员工和产品线')
     return
   }
   
-  const currentStage = selectedProductLine.value.through?.interviewStage
+  const currentStage = selectedInterview.value.currentStage
   if (!validateForm(currentStage)) {
     return
   }
   
   submitLoading.value = true
   try {
+    const roundsArray = Object.values(interviewForm.rounds).filter(round => round)
+
     const updateData = {
-      name: selectedEmployee.value.name,
-      email: selectedEmployee.value.email,
-      phone: selectedEmployee.value.phone,
-      gender: selectedEmployee.value.gender,
-      idCard: selectedEmployee.value.idCard,
-      productLines: (selectedEmployee.value.productLines || []).map(pl => {
-        if (pl?.id === selectedProductLine.value.id) {
-          return {
-            id: pl.through?.id,
-            productLineId: pl.id,
-            interviewStage: pl.through?.interviewStage,
-            recommendDate: interviewForm.recommendDate,
-            qualificationInterviewDate: interviewForm.qualificationInterviewDate,
-            qualificationInterviewer: interviewForm.qualificationInterviewer,
-            qualificationConclusion: interviewForm.qualificationConclusion,
-            qualificationPassed: interviewForm.qualificationPassed,
-            techInterview1Date: interviewForm.techInterview1Date,
-            techInterview1Interviewer: interviewForm.techInterview1Interviewer,
-            techInterview1Content: interviewForm.techInterview1Content,
-            techInterview1Passed: interviewForm.techInterview1Passed,
-            techInterview2Date: interviewForm.techInterview2Date,
-            techInterview2Interviewer: interviewForm.techInterview2Interviewer,
-            techInterview2Content: interviewForm.techInterview2Content,
-            techInterview2Passed: interviewForm.techInterview2Passed,
-            managerInterviewDate: interviewForm.managerInterviewDate,
-            managerInterviewer: interviewForm.managerInterviewer,
-            managerInterviewContent: interviewForm.managerInterviewContent,
-            managerInterviewPassed: interviewForm.managerInterviewPassed,
-            approvalDate: interviewForm.approvalDate,
-            approver: interviewForm.approver,
-            approvalRemark: interviewForm.approvalRemark,
-            approvalPassed: interviewForm.approvalPassed,
-            offerDate: interviewForm.offerDate,
-            offerApprover: interviewForm.offerApprover,
-            offerRemark: interviewForm.offerRemark
-          }
-        }
-        return {
-          id: pl.through?.id,
-          productLineId: pl.id,
-          interviewStage: pl.through?.interviewStage,
-          recommendDate: pl.through?.recommendDate
-        }
-      })
+      candidateId: selectedEmployee.value.id,
+      productLineId: selectedProductLine.value.id,
+      recommendDate: interviewForm.rounds['recommend_interview']?.scheduledDate,
+      currentStage: interviewForm.currentStage,
+      finalStatus: interviewForm.finalStatus,
+      rounds: roundsArray
     }
-    
-    await candidateApi.update(selectedEmployee.value.id, updateData)
+
+    if (selectedInterview.value?.id) {
+      await interviewApi.update(selectedInterview.value.id, updateData)
+    } else {
+      await interviewApi.create(updateData)
+    }
     ElMessage.success('保存成功')
     dialogVisible.value = false
     fetchEmployees()
   } catch (error) {
-    console.error('Error in handleSubmit:', error)
     ElMessage.error(error.message || '操作失败')
   } finally {
     submitLoading.value = false
@@ -938,94 +933,98 @@ const validateForm = (currentStage) => {
   const stageIndex = stageOrder.indexOf(currentStage)
   
   if (stageIndex >= stageOrder.indexOf('recommend_interview')) {
-    if (!interviewForm.recommendDate) {
+    if (!interviewForm.rounds['recommend_interview']?.scheduledDate) {
       ElMessage.error('请填写推荐日期')
       return false
     }
   }
   
   if (stageIndex >= stageOrder.indexOf('qualification_interview')) {
-    if (!interviewForm.qualificationInterviewDate) {
+    if (!interviewForm.rounds['qualification_interview']?.scheduledDate) {
       ElMessage.error('请填写资面日期')
       return false
     }
-    if (!interviewForm.qualificationInterviewer) {
+    if (!interviewForm.rounds['qualification_interview']?.interviewer) {
       ElMessage.error('请填写资面顾问')
       return false
     }
-    if (interviewForm.qualificationPassed === null) {
+    if (interviewForm.rounds['qualification_interview']?.passed === null) {
       ElMessage.error('请选择资面是否通过')
       return false
     }
   }
   
   if (stageIndex >= stageOrder.indexOf('tech_interview_1')) {
-    if (!interviewForm.techInterview1Date) {
+    if (!interviewForm.rounds['tech_interview_1']?.scheduledDate) {
       ElMessage.error('请填写技一日期')
       return false
     }
-    if (!interviewForm.techInterview1Interviewer) {
+    if (!interviewForm.rounds['tech_interview_1']?.interviewer) {
       ElMessage.error('请填写技一面试官')
       return false
     }
-    if (interviewForm.techInterview1Passed === null) {
+    if (interviewForm.rounds['tech_interview_1']?.passed === null) {
       ElMessage.error('请选择技一是否通过')
       return false
     }
   }
   
   if (stageIndex >= stageOrder.indexOf('tech_interview_2')) {
-    if (!interviewForm.techInterview2Date) {
+    if (!interviewForm.rounds['tech_interview_2']?.scheduledDate) {
       ElMessage.error('请填写技二日期')
       return false
     }
-    if (!interviewForm.techInterview2Interviewer) {
+    if (!interviewForm.rounds['tech_interview_2']?.interviewer) {
       ElMessage.error('请填写技二面试官')
       return false
     }
-    if (interviewForm.techInterview2Passed === null) {
+    if (interviewForm.rounds['tech_interview_2']?.passed === null) {
       ElMessage.error('请选择技二是否通过')
       return false
     }
   }
   
   if (stageIndex >= stageOrder.indexOf('manager_interview')) {
-    if (!interviewForm.managerInterviewDate) {
+    if (!interviewForm.rounds['manager_interview']?.scheduledDate) {
       ElMessage.error('请填写主面日期')
       return false
     }
-    if (!interviewForm.managerInterviewer) {
+    if (!interviewForm.rounds['manager_interview']?.interviewer) {
       ElMessage.error('请填写主考官')
       return false
     }
-    if (interviewForm.managerInterviewPassed === null) {
+    if (interviewForm.rounds['manager_interview']?.passed === null) {
       ElMessage.error('请选择主面是否通过')
       return false
     }
   }
   
   if (stageIndex >= stageOrder.indexOf('approval')) {
-    if (!interviewForm.approvalDate) {
+    if (!interviewForm.rounds['approval']?.scheduledDate) {
       ElMessage.error('请填写审批日期')
       return false
     }
-    if (!interviewForm.approver) {
+    if (!interviewForm.rounds['approval']?.interviewer) {
       ElMessage.error('请填写审批人')
       return false
     }
-    if (interviewForm.approvalPassed === null) {
+    if (interviewForm.rounds['approval']?.passed === null) {
       ElMessage.error('请选择审批是否通过')
       return false
     }
   }
   
   if (stageIndex >= stageOrder.indexOf('offer')) {
-    if (!interviewForm.offerDate) {
+    if (!interviewForm.rounds['offer']?.scheduledDate) {
       ElMessage.error('请填写Offer日期')
       return false
     }
-    if (!interviewForm.offerApprover) {
+    if (!interviewForm.rounds['offer']?.interviewer) {
       ElMessage.error('请填写Offer审批人')
+      return false
+    }
+    if (interviewForm.rounds['offer']?.passed === null) {
+      ElMessage.error('请选择Offer是否通过')
       return false
     }
   }
@@ -1036,33 +1035,9 @@ const validateForm = (currentStage) => {
 const handleDialogClose = () => {
   selectedEmployee.value = null
   selectedProductLine.value = null
+  selectedInterview.value = null
   isEditMode.value = false
-  Object.assign(interviewForm, {
-    recommendDate: null,
-    qualificationInterviewDate: null,
-    qualificationInterviewer: '',
-    qualificationConclusion: '',
-    qualificationPassed: null,
-    techInterview1Date: null,
-    techInterview1Interviewer: '',
-    techInterview1Content: '',
-    techInterview1Passed: null,
-    techInterview2Date: null,
-    techInterview2Interviewer: '',
-    techInterview2Content: '',
-    techInterview2Passed: null,
-    managerInterviewDate: null,
-    managerInterviewer: '',
-    managerInterviewContent: '',
-    managerInterviewPassed: null,
-    approvalDate: null,
-    approver: '',
-    approvalRemark: '',
-    approvalPassed: null,
-    offerDate: null,
-    offerApprover: '',
-    offerRemark: ''
-  })
+  Object.assign(interviewForm, initInterviewForm())
 }
 
 onMounted(() => {
@@ -1071,3 +1046,41 @@ onMounted(() => {
   fetchProductLines()
 })
 </script>
+
+<style scoped>
+.page-container {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.page-header {
+  margin-top: 0;
+  padding-top: 0;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  margin-bottom: 16px;
+  height: 36px;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.card-container {
+  margin-top: -5px;
+  padding-top: 20px;
+}
+
+.search-form {
+  margin-bottom: 20px;
+}
+
+:deep(.el-divider__text) {
+  color: #409eff;
+  font-weight: 600;
+}
+</style>

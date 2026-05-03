@@ -108,7 +108,6 @@ const fetchExamPapers = async () => {
     const data = await examPaperApi.getAll()
     examPapers.value = data.examPapers.filter(p => p.isActive)
   } catch (error) {
-    console.error('Failed to fetch exam papers:', error)
   }
 }
 

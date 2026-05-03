@@ -124,7 +124,6 @@ const fetchOptions = async () => {
     const data = await productLineApi.getAll()
     productLines.value = data.productLines || []
   } catch (error) {
-    console.error('Failed to fetch options:', error)
   }
 }
 

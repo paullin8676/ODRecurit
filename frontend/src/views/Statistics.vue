@@ -253,7 +253,6 @@ const fetchData = async () => {
       initConsultantChart(consultantRes.statistics || [])
     }, 100)
   } catch (error) {
-    console.error('Failed to fetch statistics:', error)
   }
 }
 
