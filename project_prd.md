@@ -61,9 +61,9 @@
   - 主管面试管理
   - 租用审批管理
   - Offer管理
-  - 推进到待入职（offer阶段推进）
-  - 推进到入职（待入职阶段推进，需填写入职日期和备注）
-  - 员工自动创建（当候选人达到pending_onboarding阶段时，自动在Employee表创建记录）
+  - 推进到待入职（offer阶段推进，编辑offer通过后候选人阶段保持offer，点击推进才变更为pending_onboarding）
+  - 员工自动创建（当offer阶段推进到pending_onboarding时，自动在Employee表创建记录）
+  - 入职日期在员工管理界面填写，面试管理界面不显示入职日期列
 
 ### 2.5 员工管理 (Employee Management)
 - **模块标识**: `employee_management`
@@ -447,15 +447,15 @@ TestType 1:N Test
 | tech_interview_2 | manager_interview | 技二通过 |
 | manager_interview | approval | 主面通过 |
 | approval | offer | 审批通过 |
-| offer | pending_onboarding | Offer通过 |
-| pending_onboarding | entry | 填写入职日期 |
+| offer | pending_onboarding | Offer通过且点击推进 |
+| pending_onboarding | entry | 入职日期在员工管理界面填写 |
 | entry | leave | 填写离职日期、类型、备注 |
 
 ### 5.2 面推规则
 
 1. **不能面推的情况**:
    - 候选人已入职或离职
-   - 候选人处于推荐面试、offer阶段
+   - 候选人处于以下面试阶段：推荐面试、资面安排、技术面试一二、主管面试、租用审批、offer
    - 没有可用产品线
    - 存在进行中的面试记录（推荐面试或通过阶段）
    - 有面试记录且最新阶段是通过的
@@ -466,8 +466,9 @@ TestType 1:N Test
 
 ### 5.3 员工自动创建逻辑
 
-当候选人被推进到 `pending_onboarding` 阶段时：
-1. 后端自动检查该候选人是否已存在Employee记录
+#### 5.3.1 候选人推进到待入职（candidate.js advance接口）
+当候选人从产品线推进阶段推进到 `pending_onboarding` 阶段时：
+1. 后端自动为该候选人的**所有产品线**创建Employee记录（不再依赖Interview.finalStatus）
 2. 如果不存在，则创建新的Employee记录
 3. Employee记录包含：
    - 候选人的基本信息（name, email, phone, gender, idCard）
@@ -476,6 +477,13 @@ TestType 1:N Test
    - candidateId 设置为候选人ID
    - lastOperatorId 设置为当前操作人
 4. 同时更新CandidateProductLine和Interview表的阶段字段
+
+#### 5.3.2 Offer阶段推进（interview.js advance接口）
+当面试从offer阶段推进到 `pending_onboarding` 时：
+1. 设置Interview.finalStatus为'passed'
+2. 自动创建Employee记录
+3. 候选人阶段通过syncCandidateStage同步更新为pending_onboarding
+4. 入职日期在员工管理界面填写，不在此处录入
 
 ### 5.4 员工管理编辑规则
 
@@ -547,10 +555,13 @@ TestType 1:N Test
 - 按阶段筛选候选人
 - 查看和编辑面试记录
 - 推进阶段
-- offer阶段推进到待入职
-- pending_onboarding阶段推进到入职（弹框填入职信息）
+- offer阶段推进到pending_onboarding（编辑offer通过后候选人阶段保持offer，点击推进才变更）
+- pending_onboarding阶段不显示推进按钮（入职日期在员工管理界面填写）
+- 删除入职日期列显示
 - 阶段字段按配置显示
 - 已完成阶段字段不可编辑
+- 编辑按钮显示条件：候选人阶段不是pending_onboarding/entry/leave且面试finalStatus为pending
+- 推进按钮显示条件：候选人阶段不是pending_onboarding/entry/leave且满足各阶段推进条件
 - 与TestStage.vue和Employees.vue保持一致的布局结构
 
 #### 6.2.2 员工管理页面 (Employees.vue)
@@ -664,6 +675,7 @@ node src/app.js
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| 1.3 | 2026-05-04 | 更新内容：<br>1. 统一后端分页响应格式（pagination对象）<br>2. 候选人列表和各阶段列表直接使用后端分页数据<br>3. 面试管理：编辑offer时不改变候选人阶段，只有点击推进才同步<br>4. can-recommend API增加面试阶段限制（blockedStages包含所有面试阶段）<br>5. 候选人推进到待入职时创建所有产品线的员工记录<br>6. offer阶段推进时创建员工记录<br>7. 优化面试管理按钮显示逻辑（编辑按钮依赖finalStatus为pending，推进按钮依赖候选人阶段和canAdvance函数）<br>8. pending_onboarding状态不显示推进和编辑按钮<br>9. 入职日期在员工管理界面填写，面试管理界面删除入职日期列 |
 | 1.2 | 2026-05-04 | 更新内容：<br>1. 新增Employee表，分离Candidate和Employee数据<br>2. 员工管理页面改为对话框编辑，姓名不可编辑<br>3. 入职日期和离职相关字段条件显示与必填验证<br>4. 统一所有模块的页面布局<br>5. 完善阶段流转规则（新增pending_onboarding阶段）<br>6. 实现员工自动创建逻辑<br>7. 规范数据库字段命名为snake_case<br>8. 更新数据库Schema文档<br>9. 员工管理删除推进功能，产品线信息显示<br>10. 修复面试推进阶段同步问题 |
 | 1.1 | 2026-04-30 | 更新内容：<br>1. 员工管理页面新增查看对话框功能<br>2. 员工管理页面当前阶段可编辑（下拉选择入职/离职）<br>3. 修复后端更新候选人阶段的逻辑<br>4. 明确currentStage和interviewStage的关系和更新规则 |
 | 1.0 | 2026-04 | 初始版本 |
