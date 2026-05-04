@@ -1,5 +1,5 @@
 const express = require('express');
-const { Employee, ProductLine, User, StageConfig } = require('../models');
+const { Employee, ProductLine, User, StageConfig, Candidate, CandidateProductLine, Interview } = require('../models');
 const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
@@ -128,7 +128,17 @@ router.put('/:id', authenticate, async (req, res, next) => {
       }
     }
 
+    const previousStage = employee.currentStage;
     await employee.update(updateData);
+
+    if (previousStage !== updateData.currentStage && (updateData.currentStage === 'entry' || updateData.currentStage === 'leave')) {
+      if (employee.candidateId) {
+        await Candidate.update(
+          { currentStage: updateData.currentStage },
+          { where: { id: employee.candidateId } }
+        );
+      }
+    }
 
     await employee.reload({
       include: [

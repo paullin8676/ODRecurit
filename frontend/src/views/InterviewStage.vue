@@ -23,13 +23,7 @@
 
       <el-table :data="employees" v-loading="loading" stripe>
         <el-table-column prop="name" label="姓名" width="100" />
-        <el-table-column prop="gender" label="性别" width="80">
-          <template #default="{ row }">
-            {{ row.gender === 'male' ? '男' : row.gender === 'female' ? '女' : '-' }}
-          </template>
-        </el-table-column>
         <el-table-column prop="phone" label="手机号" width="130" />
-        <el-table-column prop="email" label="邮箱" width="180" />
         <el-table-column label="当前阶段" width="120">
           <template #default="{ row }">
             {{ row.currentStage ? stageNames[row.currentStage] : '-' }}
@@ -467,8 +461,11 @@
       </div>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button v-if="isEditMode && canAdvanceInDialog()" type="primary" @click="handleSaveAndAdvance" :loading="submitLoading">
+          保存&推进
+        </el-button>
         <el-button v-if="isEditMode" type="primary" @click="handleSubmit" :loading="submitLoading">
-          确定
+          保存
         </el-button>
       </template>
     </el-dialog>
@@ -673,6 +670,9 @@ const fetchProductLines = async () => {
 }
 
 const getRoundDate = (row, stageCode) => {
+  if (stageCode === 'recommend_interview' && row.recommendDate) {
+    return row.recommendDate
+  }
   if (row.roundsMap && row.roundsMap[stageCode]) {
     return row.roundsMap[stageCode].scheduledDate
   }
@@ -745,7 +745,11 @@ const openDetailDialog = async (row) => {
       currentStage: row.currentStage,
       finalStatus: row.finalStatus
     })
-    
+
+    if (row.recommendDate) {
+      interviewForm.rounds['recommend_interview'].scheduledDate = row.recommendDate
+    }
+
     if (row.rounds && row.rounds.length > 0) {
       row.rounds.forEach(round => {
         if (interviewForm.rounds[round.stageCode]) {
@@ -841,6 +845,38 @@ const canAdvance = (row) => {
   }
 }
 
+const canAdvanceInDialog = () => {
+  if (!selectedInterview.value) {
+    return false
+  }
+  const currentStage = selectedInterview.value.currentStage
+
+  switch (currentStage) {
+    case 'recommend_interview':
+      return interviewForm.rounds['recommend_interview']?.scheduledDate !== null
+    case 'qualification_interview':
+      return interviewForm.rounds['qualification_interview']?.scheduledDate && interviewForm.rounds['qualification_interview']?.passed === true
+    case 'tech_interview_1':
+      return interviewForm.rounds['tech_interview_1']?.scheduledDate && interviewForm.rounds['tech_interview_1']?.passed === true
+    case 'tech_interview_2':
+      return interviewForm.rounds['tech_interview_2']?.scheduledDate && interviewForm.rounds['tech_interview_2']?.passed === true
+    case 'manager_interview':
+      return interviewForm.rounds['manager_interview']?.scheduledDate && interviewForm.rounds['manager_interview']?.passed === true
+    case 'approval':
+      return interviewForm.rounds['approval']?.scheduledDate && interviewForm.rounds['approval']?.passed === true
+    case 'offer':
+      return interviewForm.rounds['offer']?.scheduledDate && interviewForm.rounds['offer']?.passed === true
+    case 'pending_onboarding':
+      return false
+    case 'entry':
+      return false
+    case 'leave':
+      return false
+    default:
+      return false
+  }
+}
+
 const handleAdvance = async (row) => {
   try {
     await interviewApi.advance(row.id)
@@ -883,12 +919,12 @@ const handleSubmit = async () => {
     ElMessage.error('请选择员工和产品线')
     return
   }
-  
+
   const currentStage = selectedInterview.value.currentStage
   if (!validateForm(currentStage)) {
     return
   }
-  
+
   submitLoading.value = true
   try {
     const roundsArray = Object.values(interviewForm.rounds).filter(round => round)
@@ -908,6 +944,47 @@ const handleSubmit = async () => {
       await interviewApi.create(updateData)
     }
     ElMessage.success('保存成功')
+    dialogVisible.value = false
+    fetchEmployees()
+  } catch (error) {
+    ElMessage.error(error.message || '操作失败')
+  } finally {
+    submitLoading.value = false
+  }
+}
+
+const handleSaveAndAdvance = async () => {
+  if (!selectedEmployee.value || !selectedProductLine.value || !selectedInterview.value) {
+    ElMessage.error('请选择员工和产品线')
+    return
+  }
+
+  const currentStage = selectedInterview.value.currentStage
+  if (!validateForm(currentStage)) {
+    return
+  }
+
+  submitLoading.value = true
+  try {
+    const roundsArray = Object.values(interviewForm.rounds).filter(round => round)
+
+    const updateData = {
+      candidateId: selectedEmployee.value.id,
+      productLineId: selectedProductLine.value.id,
+      recommendDate: interviewForm.rounds['recommend_interview']?.scheduledDate,
+      currentStage: interviewForm.currentStage,
+      finalStatus: interviewForm.finalStatus,
+      rounds: roundsArray
+    }
+
+    if (selectedInterview.value?.id) {
+      await interviewApi.update(selectedInterview.value.id, updateData)
+    } else {
+      await interviewApi.create(updateData)
+    }
+
+    await interviewApi.advance(selectedInterview.value.id)
+    ElMessage.success('保存并推进成功')
     dialogVisible.value = false
     fetchEmployees()
   } catch (error) {

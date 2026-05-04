@@ -617,17 +617,6 @@ router.get('/:id/can-recommend', authenticate, async (req, res, next) => {
       return res.status(404).json({ error: 'Candidate not found' });
     }
 
-    const blockedStages = [
-      'recommend_interview', 'qualification_interview', 
-      'tech_interview_1', 'tech_interview_2', 
-      'manager_interview', 'approval', 
-      'offer', 'pending_onboarding', 
-      'entry', 'leave'
-    ];
-    if (blockedStages.includes(candidate.currentStage)) {
-      return res.json({ canRecommend: false, reason: '候选人当前阶段不允许面推' });
-    }
-
     const productLines = await ProductLine.findAll({ where: { isActive: true } });
     if (!productLines || productLines.length === 0) {
       return res.json({ canRecommend: false, reason: '没有可用的产品线' });
@@ -647,12 +636,12 @@ router.get('/:id/can-recommend', authenticate, async (req, res, next) => {
       return res.json({ canRecommend: true, reason: '没有面试记录，可以面推', availableProductLines });
     }
 
-    const hasPassedRecord = existingAssociations.some(assoc => {
-      return assoc.Interview && assoc.Interview.finalStatus === 'passed';
+    const hasPassedOrPendingRecord = existingAssociations.some(assoc => {
+      return assoc.Interview && (assoc.Interview.finalStatus === 'passed' || assoc.Interview.finalStatus === 'pending');
     });
 
-    if (hasPassedRecord) {
-      return res.json({ canRecommend: false, reason: '存在通过的面试记录，不能面推' });
+    if (hasPassedOrPendingRecord) {
+      return res.json({ canRecommend: false, reason: '存在通过或面试中的记录，不能面推' });
     }
 
     const usedProductLineIds = existingAssociations.map(assoc => assoc.productLineId);
