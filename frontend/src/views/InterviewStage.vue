@@ -123,18 +123,13 @@
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column label="入职日期" width="120">
-          <template #default="{ row }">
-            {{ row.entryDate ? new Date(row.entryDate).toLocaleDateString() : '-' }}
-          </template>
-        </el-table-column>
         <el-table-column label="操作" fixed="right" width="200">
           <template #default="{ row }">
             <el-button type="info" link size="small" @click="handleView(row)">
               查看
             </el-button>
-            <template v-if="row.candidateCurrentStage !== 'entry' && isCurrentStage(row.currentStage) && row.currentStage !== 'entry' && row.finalStatus === 'pending'">
-              <el-button type="primary" link size="small" @click="handleEdit(row)">
+            <template v-if="row.candidateCurrentStage !== 'pending_onboarding' && row.candidateCurrentStage !== 'entry' && row.candidateCurrentStage !== 'leave'">
+              <el-button v-if="row.finalStatus === 'pending'" type="primary" link size="small" @click="handleEdit(row)">
                 编辑
               </el-button>
               <el-button v-if="canAdvance(row)" type="success" link size="small" @click="handleAdvance(row)">
@@ -836,7 +831,7 @@ const canAdvance = (row) => {
     case 'offer':
       return getRoundDate(row, 'offer') && getRoundPassed(row, 'offer') === true
     case 'pending_onboarding':
-      return true
+      return false
     case 'entry':
       return false
     case 'leave':
@@ -847,19 +842,12 @@ const canAdvance = (row) => {
 }
 
 const handleAdvance = async (row) => {
-  if (row.currentStage === 'offer' || row.currentStage === 'pending_onboarding') {
-    employeeToAdvance.value = row
-    entryForm.entryDate = null
-    entryForm.entryRemark = ''
-    entryDialogVisible.value = true
-  } else {
-    try {
-      await interviewApi.advance(row.id)
-      ElMessage.success('推进成功')
-      fetchEmployees()
-    } catch (error) {
-      ElMessage.error('推进失败')
-    }
+  try {
+    await interviewApi.advance(row.id)
+    ElMessage.success('推进成功')
+    fetchEmployees()
+  } catch (error) {
+    ElMessage.error('推进失败')
   }
 }
 

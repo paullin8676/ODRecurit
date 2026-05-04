@@ -497,7 +497,7 @@ const fetchEmployees = async () => {
     }
     
     employees.value = transformedEmployees
-    pagination.total = transformedEmployees.length
+    pagination.total = data.pagination?.total || transformedEmployees.length
   } catch (error) {
   } finally {
     loading.value = false

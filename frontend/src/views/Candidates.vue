@@ -336,10 +336,8 @@ const fetchCandidates = async () => {
       })
     }
 
-    const startIndex = (pagination.page - 1) * pagination.pageSize
-    const endIndex = startIndex + pagination.pageSize
-    candidates.value = candidatesList.slice(startIndex, endIndex)
-    pagination.total = candidatesList.length
+    candidates.value = candidatesList
+    pagination.total = data.pagination?.total || candidatesList.length
   } catch (error) {
   } finally {
     loading.value = false

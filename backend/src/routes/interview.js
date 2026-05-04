@@ -279,8 +279,9 @@ router.put('/:id', async (req, res, next) => {
       ]
     });
 
-    await syncCandidateStage(updatedInterview.candidateProductLine.candidateId);
-    
+    // update时不同步候选人阶段，只在advance时才同步
+    // await syncCandidateStage(updatedInterview.candidateProductLine.candidateId);
+
     res.json(transformInterview(updatedInterview));
   } catch (error) {
     next(error);
@@ -405,6 +406,7 @@ router.post('/advance/:interviewId', async (req, res, next) => {
     }
     
     const currentIndex = INTERVIEW_STAGES.indexOf(interview.currentStage);
+    const originalCurrentStage = interview.currentStage;
     let nextStage;
     
     if (currentIndex < INTERVIEW_STAGES.length - 1) {
@@ -423,6 +425,32 @@ router.post('/advance/:interviewId', async (req, res, next) => {
 
       if (interview.candidateProductLine) {
         await interview.candidateProductLine.update({ interviewStage: nextStage });
+      }
+
+      // 如果是从offer推进到pending_onboarding
+      if (originalCurrentStage === 'offer') {
+        await interview.update({ finalStatus: 'passed' });
+
+        if (interview.candidateProductLine) {
+          const candidate = await Candidate.findByPk(interview.candidateProductLine.candidateId);
+          if (candidate) {
+            await Employee.findOrCreate({
+              where: {
+                candidateId: candidate.id,
+                productLineId: interview.candidateProductLine.productLineId
+              },
+              defaults: {
+                name: candidate.name,
+                email: candidate.email,
+                phone: candidate.phone,
+                gender: candidate.gender,
+                idCard: candidate.idCard,
+                lastOperatorId: candidate.lastOperatorId,
+                currentStage: 'pending_onboarding'
+              }
+            });
+          }
+        }
       }
     } else {
       await interview.update({ finalStatus: 'passed' });

@@ -401,11 +401,9 @@ const fetchEmployees = async () => {
       })
     }
     
-    // Apply pagination
-    const startIndex = (pagination.page - 1) * pagination.pageSize
-    const endIndex = startIndex + pagination.pageSize
-    employees.value = transformedEmployees.slice(startIndex, endIndex)
-    pagination.total = transformedEmployees.length
+    // Apply pagination - 使用后端返回的分页数据
+    employees.value = transformedEmployees
+    pagination.total = data.pagination?.total || transformedEmployees.length
   } catch (error) {
   } finally {
     loading.value = false

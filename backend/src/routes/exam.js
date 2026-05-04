@@ -126,9 +126,11 @@ router.get('/', authenticate, async (req, res, next) => {
 
     res.json({
       exams: paginatedCandidates,
-      total: total,
-      page: parseInt(page),
-      pageSize: parseInt(pageSize)
+      pagination: {
+        page: parseInt(page),
+        pageSize: parseInt(pageSize),
+        total
+      }
     });
   } catch (error) {
     next(error);

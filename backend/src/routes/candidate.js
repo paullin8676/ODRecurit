@@ -82,7 +82,7 @@ router.get('/', authenticate, async (req, res, next) => {
 
     if (name) {
       const nameLower = name.toLowerCase();
-      filteredCandidates = filteredCandidates.filter(candidate =>
+      filteredCandidates = filteredCandidates.filter(candidate => 
         candidate.name.toLowerCase().includes(nameLower)
       );
     }
@@ -90,7 +90,7 @@ router.get('/', authenticate, async (req, res, next) => {
     if (currentStage) {
       filteredCandidates = filteredCandidates.filter(candidate => {
         if (candidate.productLines && candidate.productLines.length > 0) {
-          return candidate.productLines.some(productLine =>
+          return candidate.productLines.some(productLine => 
             productLine.through.interviewStage === currentStage
           );
         } else {
@@ -105,9 +105,11 @@ router.get('/', authenticate, async (req, res, next) => {
 
     res.json({
       candidates: paginatedCandidates,
-      total,
-      page: parseInt(page),
-      pageSize: parseInt(pageSize)
+      pagination: {
+        page: parseInt(page),
+        pageSize: parseInt(pageSize),
+        total
+      }
     });
   } catch (error) {
     next(error);
@@ -421,16 +423,12 @@ router.put('/:id/advance', authenticate, async (req, res, next) => {
       await candidate.update({ currentStage: nextStage, lastOperatorId: req.user.id });
 
       if (nextStage === 'pending_onboarding') {
-        const passedProductLines = await CandidateProductLine.findAll({
-          where: { candidateId: candidate.id },
-          include: [{
-            model: Interview,
-            where: { finalStatus: 'passed' }
-          }]
+        const allProductLines = await CandidateProductLine.findAll({
+          where: { candidateId: candidate.id }
         });
 
-        if (passedProductLines.length > 0) {
-          for (const pl of passedProductLines) {
+        if (allProductLines.length > 0) {
+          for (const pl of allProductLines) {
             await Employee.findOrCreate({
               where: {
                 candidateId: candidate.id,
@@ -487,16 +485,12 @@ router.put('/:id/advance', authenticate, async (req, res, next) => {
       }
 
       if (nextStage === 'pending_onboarding') {
-        const passedProductLines = await CandidateProductLine.findAll({
-          where: { candidateId: candidate.id },
-          include: [{
-            model: Interview,
-            where: { finalStatus: 'passed' }
-          }]
+        const allProductLines = await CandidateProductLine.findAll({
+          where: { candidateId: candidate.id }
         });
 
-        if (passedProductLines.length > 0) {
-          for (const pl of passedProductLines) {
+        if (allProductLines.length > 0) {
+          for (const pl of allProductLines) {
             await Employee.findOrCreate({
               where: {
                 candidateId: candidate.id,
@@ -623,7 +617,13 @@ router.get('/:id/can-recommend', authenticate, async (req, res, next) => {
       return res.status(404).json({ error: 'Candidate not found' });
     }
 
-    const blockedStages = ['offer', 'pending_onboarding', 'entry', 'leave'];
+    const blockedStages = [
+      'recommend_interview', 'qualification_interview', 
+      'tech_interview_1', 'tech_interview_2', 
+      'manager_interview', 'approval', 
+      'offer', 'pending_onboarding', 
+      'entry', 'leave'
+    ];
     if (blockedStages.includes(candidate.currentStage)) {
       return res.json({ canRecommend: false, reason: '候选人当前阶段不允许面推' });
     }
