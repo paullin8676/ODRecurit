@@ -675,6 +675,8 @@ node src/app.js
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| 1.5 | 2026-05-04 | 更新内容：<br>1. 候选人表新增consultantId字段，用于标识负责该候选人招聘全流程的顾问<br>2. 主管和顾问都可以作为consultant_id<br>3. 新增候选人时默认选择当前登录用户作为负责顾问<br>4. 统计报表by-consultant接口支持主管和顾问统计（剔除admin用户）<br>5. 面试管理分页功能修复<br>6. 统计数据接口修复（添加Interview和InterviewRound模型引入）<br>7. 控制台统计卡片更新：新增韧测完成、待入职统计<br>8. 饼图标签配置优化，显示小扇形标签和连接线 |
+| 1.4 | 2026-05-04 | 更新内容：<br>1. can-recommend API移除候选人当前阶段限制（blockedStages），改为检查面试记录状态<br>2. hasPassedRecord改为hasPassedOrPendingRecord，存在通过或pending状态的面试记录都不能面推<br>3. 员工阶段变更为entry或leave时，同步更新对应候选人的currentStage<br>4. 面试管理对话框新增"保存&推进"按钮功能<br>5. canAdvanceInDialog函数用于对话框内推进条件判断<br>6. 推荐面试日期显示逻辑优化（getRoundDate增加recommend_interview阶段处理）<br>7. 面试管理表格简化（移除性别和邮箱列） |
 | 1.3 | 2026-05-04 | 更新内容：<br>1. 统一后端分页响应格式（pagination对象）<br>2. 候选人列表和各阶段列表直接使用后端分页数据<br>3. 面试管理：编辑offer时不改变候选人阶段，只有点击推进才同步<br>4. can-recommend API增加面试阶段限制（blockedStages包含所有面试阶段）<br>5. 候选人推进到待入职时创建所有产品线的员工记录<br>6. offer阶段推进时创建员工记录<br>7. 优化面试管理按钮显示逻辑（编辑按钮依赖finalStatus为pending，推进按钮依赖候选人阶段和canAdvance函数）<br>8. pending_onboarding状态不显示推进和编辑按钮<br>9. 入职日期在员工管理界面填写，面试管理界面删除入职日期列 |
 | 1.2 | 2026-05-04 | 更新内容：<br>1. 新增Employee表，分离Candidate和Employee数据<br>2. 员工管理页面改为对话框编辑，姓名不可编辑<br>3. 入职日期和离职相关字段条件显示与必填验证<br>4. 统一所有模块的页面布局<br>5. 完善阶段流转规则（新增pending_onboarding阶段）<br>6. 实现员工自动创建逻辑<br>7. 规范数据库字段命名为snake_case<br>8. 更新数据库Schema文档<br>9. 员工管理删除推进功能，产品线信息显示<br>10. 修复面试推进阶段同步问题 |
 | 1.1 | 2026-04-30 | 更新内容：<br>1. 员工管理页面新增查看对话框功能<br>2. 员工管理页面当前阶段可编辑（下拉选择入职/离职）<br>3. 修复后端更新候选人阶段的逻辑<br>4. 明确currentStage和interviewStage的关系和更新规则 |

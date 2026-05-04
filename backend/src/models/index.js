@@ -46,6 +46,10 @@ ExamPassLine.belongsTo(ExamPaper, { foreignKey: 'examPaperId' });
 Candidate.hasMany(ExamStage, { foreignKey: 'candidateId' });
 ExamStage.belongsTo(Candidate, { foreignKey: 'candidateId' });
 
+// Consultant association
+User.hasMany(Candidate, { as: 'candidates', foreignKey: 'consultantId' });
+Candidate.belongsTo(User, { as: 'consultant', foreignKey: 'consultantId' });
+
 // New associations for Exam, Test, Interview models
 Candidate.hasOne(Exam, { foreignKey: 'candidateId' });
 Exam.belongsTo(Candidate, { foreignKey: 'candidateId' });

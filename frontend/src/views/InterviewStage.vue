@@ -653,7 +653,7 @@ const fetchEmployees = async () => {
       })
     }
     
-    employees.value = flattenedEmployees
+    employees.value = flattenedEmployees.slice((pagination.page - 1) * pagination.pageSize, pagination.page * pagination.pageSize)
     pagination.total = flattenedEmployees.length
   } catch (error) {
   } finally {

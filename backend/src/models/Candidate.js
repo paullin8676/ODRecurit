@@ -27,6 +27,14 @@ const Candidate = sequelize.define('Candidate', {
     type: DataTypes.STRING(20),
     allowNull: true
   },
+  consultantId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'User',
+      key: 'id'
+    }
+  },
   lastOperatorId: {
     type: DataTypes.INTEGER,
     allowNull: true,

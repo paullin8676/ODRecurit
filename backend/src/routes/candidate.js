@@ -33,6 +33,11 @@ router.get('/', authenticate, async (req, res, next) => {
           model: User,
           as: 'lastOperator',
           attributes: ['id', 'username', 'realName']
+        },
+        {
+          model: User,
+          as: 'consultant',
+          attributes: ['id', 'username', 'realName']
         }
       ]
     });
@@ -182,6 +187,7 @@ router.post('/', authenticate, async (req, res, next) => {
       phone,
       gender,
       idCard,
+      consultantId,
       productLines
     } = req.body;
 
@@ -221,6 +227,7 @@ router.post('/', authenticate, async (req, res, next) => {
       phone,
       gender,
       idCard,
+      consultantId,
       currentStage: 'candidate_entry',
       lastOperatorId: req.user.id
     });
@@ -303,7 +310,7 @@ router.put('/:id', authenticate, async (req, res, next) => {
       }
     }
 
-    const allowedFields = ['name', 'email', 'phone', 'gender', 'idCard', 'currentStage'];
+    const allowedFields = ['name', 'email', 'phone', 'gender', 'idCard', 'currentStage', 'consultantId'];
     const updateData = {
       lastOperatorId: req.user.id
     };

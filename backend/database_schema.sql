@@ -61,10 +61,12 @@ CREATE TABLE IF NOT EXISTS Candidate (
     phone VARCHAR(20),
     gender VARCHAR(10),
     idCard VARCHAR(20),
+    consultantId INTEGER,
     lastOperatorId INTEGER,
     currentStage VARCHAR(50) DEFAULT 'candidate_entry',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (consultantId) REFERENCES User(id),
     FOREIGN KEY (lastOperatorId) REFERENCES User(id)
 );
 

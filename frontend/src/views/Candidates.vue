@@ -59,6 +59,18 @@
             </template>
           </template>
         </el-table-column>
+        <el-table-column label="负责顾问" width="120">
+          <template #default="{ row, $index }">
+            <template v-if="editingRowIndex === $index">
+              <el-select v-model="editingForm.consultantId" placeholder="请选择顾问" style="width: 100%" @keyup.enter="handleSave($index, row)" @keyup.esc="cancelEdit">
+                <el-option v-for="consultant in consultants" :key="consultant.id" :label="consultant.realName || consultant.username" :value="consultant.id" />
+              </el-select>
+            </template>
+            <template v-else>
+              {{ row.consultant?.realName || row.consultant?.username || '-' }}
+            </template>
+          </template>
+        </el-table-column>
         <el-table-column prop="idCard" label="身份证号" width="180">
           <template #default="{ row, $index }">
             <template v-if="editingRowIndex === $index">
@@ -161,6 +173,11 @@
         <el-form-item label="邮箱" prop="email">
           <el-input v-model="form.email" placeholder="请输入邮箱" />
         </el-form-item>
+        <el-form-item label="负责顾问">
+          <el-select v-model="form.consultantId" placeholder="请选择顾问">
+            <el-option v-for="consultant in consultants" :key="consultant.id" :label="consultant.realName || consultant.username" :value="consultant.id" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="身份证号" prop="idCard">
           <el-input v-model="form.idCard" placeholder="请输入身份证号" />
         </el-form-item>
@@ -178,7 +195,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { candidateApi, stageConfigApi } from '../api'
+import { candidateApi, stageConfigApi, userApi } from '../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, Refresh } from '@element-plus/icons-vue'
 
@@ -216,6 +233,7 @@ const filteredStageNames = computed(() => {
 })
 
 const candidates = ref([])
+const consultants = ref([])
 const loading = ref(false)
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增候选人')
@@ -230,7 +248,8 @@ const editingForm = reactive({
   gender: '',
   phone: '',
   email: '',
-  idCard: ''
+  idCard: '',
+  consultantId: ''
 })
 
 const searchForm = reactive({
@@ -249,7 +268,8 @@ const form = reactive({
   gender: 'male',
   phone: '',
   email: '',
-  idCard: ''
+  idCard: '',
+  consultantId: ''
 })
 
 const rules = {
@@ -370,6 +390,10 @@ const handleCreate = () => {
   dialogTitle.value = '新增候选人'
   isEdit.value = false
   dialogVisible.value = true
+  const currentUser = JSON.parse(localStorage.getItem('user') || 'null')
+  if (currentUser) {
+    form.consultantId = currentUser.id
+  }
 }
 
 const handleView = (row) => {
@@ -383,7 +407,8 @@ const handleEdit = (row, index) => {
     gender: row.gender,
     phone: row.phone,
     email: row.email,
-    idCard: row.idCard
+    idCard: row.idCard,
+    consultantId: row.consultantId || ''
   })
   setTimeout(() => {
     if (phoneInputRef.value) {
@@ -399,7 +424,8 @@ const cancelEdit = () => {
     gender: '',
     phone: '',
     email: '',
-    idCard: ''
+    idCard: '',
+    consultantId: ''
   })
 }
 
@@ -532,12 +558,22 @@ const handleDialogClose = () => {
     gender: '',
     phone: '',
     email: '',
-    idCard: ''
+    idCard: '',
+    consultantId: ''
   })
 }
 
+const fetchConsultants = async () => {
+  try {
+    const data = await userApi.getAll({})
+    consultants.value = data.users || []
+  } catch (error) {
+    consultants.value = []
+  }
+}
+
 onMounted(async () => {
-  await Promise.all([fetchCandidates(), fetchStageConfig()])
+  await Promise.all([fetchCandidates(), fetchStageConfig(), fetchConsultants()])
 })
 </script>
 

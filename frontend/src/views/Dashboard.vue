@@ -5,7 +5,7 @@
     </div>
 
     <el-row :gutter="20" class="stats-row">
-      <el-col :span="6">
+      <el-col :span="4">
         <div class="stat-card">
           <div class="stat-icon" style="background: #409eff">
             <el-icon :size="32"><User /></el-icon>
@@ -16,7 +16,7 @@
           </div>
         </div>
       </el-col>
-      <el-col :span="6">
+      <el-col :span="4">
         <div class="stat-card">
           <div class="stat-icon" style="background: #67c23a">
             <el-icon :size="32"><CircleCheck /></el-icon>
@@ -27,7 +27,29 @@
           </div>
         </div>
       </el-col>
-      <el-col :span="6">
+      <el-col :span="4">
+        <div class="stat-card">
+          <div class="stat-icon" style="background: #909399">
+            <el-icon :size="32"><CircleCheck /></el-icon>
+          </div>
+          <div class="stat-info">
+            <div class="stat-value">{{ summary.testComplete || 0 }}</div>
+            <div class="stat-label">韧测完成</div>
+          </div>
+        </div>
+      </el-col>
+      <el-col :span="4">
+        <div class="stat-card">
+          <div class="stat-icon" style="background: #00acc1">
+            <el-icon :size="32"><Document /></el-icon>
+          </div>
+          <div class="stat-info">
+            <div class="stat-value">{{ summary.pendingOnboarding || 0 }}</div>
+            <div class="stat-label">待入职</div>
+          </div>
+        </div>
+      </el-col>
+      <el-col :span="4">
         <div class="stat-card">
           <div class="stat-icon" style="background: #e6a23c">
             <el-icon :size="32"><Document /></el-icon>
@@ -38,7 +60,7 @@
           </div>
         </div>
       </el-col>
-      <el-col :span="6">
+      <el-col :span="4">
         <div class="stat-card">
           <div class="stat-icon" style="background: #f56c6c">
             <el-icon :size="32"><Avatar /></el-icon>
@@ -94,7 +116,7 @@ const recentCandidates = ref([])
 const stageChartRef = ref()
 
 const stageNames = {
-  employee_entry: '候选录入',
+  candidate_entry: '候选录入',
   exam_declare: '机考申报',
   exam_complete: '机考完成',
   test_declare: '韧测申报',
@@ -106,6 +128,7 @@ const stageNames = {
   manager_interview: '主管面试',
   approval: '租用审批',
   offer: 'Offer',
+  pending_onboarding: '待入职',
   entry: '入职',
   leave: '离职'
 }
@@ -137,7 +160,8 @@ const initStageChart = () => {
       {
         type: 'pie',
         radius: ['40%', '70%'],
-        avoidLabelOverlap: false,
+        center: ['55%', '45%'],
+        avoidLabelOverlap: true,
         itemStyle: {
           borderRadius: 10,
           borderColor: '#fff',
@@ -145,7 +169,16 @@ const initStageChart = () => {
         },
         label: {
           show: true,
-          formatter: '{b}: {c}'
+          formatter: '{b}: {c}',
+          position: 'outside',
+          distance: 20,
+          minShowLabelAngle: 1
+        },
+        labelLine: {
+          show: true,
+          length: 10,
+          length2: 10,
+          smooth: true
         },
         data: stageData,
         color: [
