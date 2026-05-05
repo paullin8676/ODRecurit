@@ -19,6 +19,13 @@
             />
           </el-select>
         </el-form-item>
+        <el-form-item label="筛选">
+          <el-select v-model="searchForm.passStatus" placeholder="请选择" clearable @change="handleSearch" style="width: auto; min-width: 100px">
+            <el-option label="全部" value="" />
+            <el-option label="通过" value="pass" />
+            <el-option label="不通过" value="fail" />
+          </el-select>
+        </el-form-item>
       </el-form>
 
       <el-table :data="employees" v-loading="loading" stripe>
@@ -556,7 +563,8 @@ const isEditMode = ref(false)
 
 const searchForm = reactive({
   name: '',
-  currentStage: ''
+  currentStage: '',
+  passStatus: ''
 })
 
 const pagination = reactive({
@@ -629,7 +637,8 @@ const fetchEmployees = async () => {
       pageSize: pagination.pageSize,
       currentStage: searchForm.currentStage || undefined,
       name: searchForm.name || undefined,
-      stages: availableStages.value
+      stages: availableStages.value,
+      passStatus: searchForm.passStatus || undefined
     }
     const data = await interviewApi.getAll(params)
     

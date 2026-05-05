@@ -83,7 +83,7 @@ const transformInterview = (interview) => {
 // Get all interviews
 router.get('/', async (req, res, next) => {
   try {
-    const { page = 1, pageSize = 20, currentStage, name, stages } = req.query;
+    const { page = 1, pageSize = 20, currentStage, name, stages, passStatus } = req.query;
     
     let availableStages = Object.keys(STAGE_NAMES);
     // 优先使用前端传来的 stages 参数
@@ -143,6 +143,17 @@ router.get('/', async (req, res, next) => {
       transformedInterviews = transformedInterviews.filter(interview => 
         interview.Candidate && interview.Candidate.name && 
         interview.Candidate.name.toLowerCase().includes(nameLower)
+      );
+    }
+    
+    // Apply passStatus filter if provided
+    if (passStatus === 'fail') {
+      transformedInterviews = transformedInterviews.filter(interview => 
+        interview.rounds && interview.rounds.some(round => round.passed === false)
+      );
+    } else if (passStatus === 'pass') {
+      transformedInterviews = transformedInterviews.filter(interview => 
+        !interview.rounds || !interview.rounds.some(round => round.passed === false)
       );
     }
     

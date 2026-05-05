@@ -65,6 +65,9 @@
   - 推进到待入职（offer阶段推进，编辑offer通过后候选人阶段保持offer，点击推进才变更为pending_onboarding）
   - 员工自动创建（当offer阶段推进到pending_onboarding时，自动在Employee表创建记录）
   - 入职日期在员工管理界面填写，面试管理界面不显示入职日期列
+  - 候选人通过/不通过筛选：
+    - 通过筛选：所有面试轮次都未标记为不通过（包括未完成的轮次）
+    - 不通过筛选：任一面试轮次标记为不通过
 
 ### 2.5 员工管理 (Employee Management)
 - **模块标识**: `employee_management`
@@ -383,7 +386,7 @@ TestType 1:N Test
 
 | 接口 | 方法 | 说明 |
 |------|------|------|
-| `/api/interviews` | GET | 获取面试列表 |
+| `/api/interviews` | GET | 获取面试列表<br>参数：<br>- name: 候选人姓名（模糊搜索）<br>- currentStage: 当前阶段<br>- passStatus: 通过状态筛选（pass/fail）<br>- stages: 阶段数组（优先级高于配置）<br>- page: 页码<br>- pageSize: 每页数量 |
 | `/api/interviews/:id` | GET | 获取面试详情 |
 | `/api/interviews` | POST | 创建面试记录 |
 | `/api/interviews/:id` | PUT | 更新面试记录 |
@@ -564,6 +567,10 @@ TestType 1:N Test
 - 编辑按钮显示条件：候选人阶段不是pending_onboarding/entry/leave且面试finalStatus为pending
 - 推进按钮显示条件：候选人阶段不是pending_onboarding/entry/leave且满足各阶段推进条件
 - 与TestStage.vue和Employees.vue保持一致的布局结构
+- 候选人通过/不通过筛选：
+  - 筛选选项：全部、通过、不通过
+  - 不通过：任一面试轮次标记为不通过（passed=false）
+  - 通过：所有面试轮次都未标记为不通过（包括未完成的轮次，passed=null或true）
 
 #### 6.2.2 员工管理页面 (Employees.vue)
 - 对话框编辑员工信息
@@ -676,6 +683,7 @@ node src/app.js
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| 1.10 | 2026-05-05 | 更新内容：<br>1. 面试管理模块新增候选人通过/不通过筛选功能<br>2. 前端添加passStatus筛选下拉框（全部、通过、不通过）<br>3. 后端GET /api/interviews接口支持passStatus参数<br>4. 筛选规则：不通过=任一面试轮次passed=false，通过=所有面试轮次都未标记为不通过<br>5. 更新project_prd.md和recruit_rule.md文档 |
 | 1.9 | 2026-05-05 | 更新内容：<br>1. 优化面试管理模块：与其他模块保持一致的列表获取逻辑和API优化<br>2. interviewApi.getAll增加stages数组参数处理<br>3. 面试管理前端支持传递availableStages给后端<br>4. 面试管理后端支持stages参数，优先使用前端传来的阶段配置<br>5. 面试管理后端使用findAndCountAll数据库分页<br>6. 修复面试管理数据加载时序：确保availableStages在fetchEmployees前加载完成 |
 | 1.8 | 2026-05-05 | 更新内容：<br>1. 优化员工管理模块：与其他模块保持一致的列表获取逻辑和API优化<br>2. employeeApi.getAll增加stages数组参数处理<br>3. 员工管理前端支持传递availableStages给后端<br>4. 员工管理后端支持stages参数，优先使用前端传来的阶段配置<br>5. 修复员工管理数据加载时序：确保availableStages在fetchEmployees前加载完成 |
 | 1.7 | 2026-05-05 | 更新内容：<br>1. 优化面试管理syncCandidateStage函数逻辑：当finalStatus为passed时，候选人阶段保持与interview.currentStage一致，而非强制设为pending_onboarding<br>2. 修改PUT接口逻辑：编辑保存时，仅当轮次未通过时设置finalStatus为failed，不再因为offer阶段通过就设置为passed<br>3. 修复前端canEditCurrentStage函数：删除finalStatus检查，即使finalStatus为passed，只要是当前阶段就可以编辑<br>4. 优化机考和韧测模块：与候选录入模块保持一致的列表获取逻辑和API优化<br>5. 推进接口保持不变：只有从offer推进到pending_onboarding时才设置finalStatus为passed |
