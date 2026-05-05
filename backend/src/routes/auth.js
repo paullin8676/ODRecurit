@@ -103,7 +103,11 @@ router.post('/change-password', authenticate, async (req, res, next) => {
       return res.status(400).json({ error: 'Old and new password are required' });
     }
 
-    const isValidPassword = await bcrypt.compare(oldPassword, req.user.password);
+    const userWithPassword = await User.findByPk(req.user.id, {
+      attributes: ['password']
+    });
+
+    const isValidPassword = await bcrypt.compare(oldPassword, userWithPassword.password);
     if (!isValidPassword) {
       return res.status(401).json({ error: 'Old password is incorrect' });
     }

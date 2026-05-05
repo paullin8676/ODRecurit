@@ -62,18 +62,20 @@
               <el-icon><UserFilled /></el-icon>
               <span v-if="!isCollapsed">{{ authStore.user?.realName || authStore.user?.username }}</span>
             </template>
-            <el-menu-item index="user-info" @click="handleUserInfoClick">
-              <el-icon><User /></el-icon>
-              <template #title>用户信息</template>
-            </el-menu-item>
-            <el-menu-item index="change-password" @click="handleChangePasswordClick">
-              <el-icon><Key /></el-icon>
-              <template #title>修改密码</template>
-            </el-menu-item>
-            <el-menu-item index="logout" @click="handleLogoutClick">
-              <el-icon><SwitchButton /></el-icon>
-              <template #title>退出登录</template>
-            </el-menu-item>
+            <template #default>
+              <div class="custom-menu-item" @click="handleUserInfoClick">
+                <el-icon><User /></el-icon>
+                <span>用户信息</span>
+              </div>
+              <div class="custom-menu-item" @click="handleChangePasswordClick">
+                <el-icon><Key /></el-icon>
+                <span>修改密码</span>
+              </div>
+              <div class="custom-menu-item" @click="handleLogoutClick">
+                <el-icon><SwitchButton /></el-icon>
+                <span>退出登录</span>
+              </div>
+            </template>
           </el-sub-menu>
         </el-menu>
       </el-aside>
@@ -104,21 +106,21 @@
     </el-dialog>
 
     <el-dialog v-model="userInfoDialogVisible" title="用户信息" width="400px">
-      <el-form :model="authStore.user" label-width="100px">
+      <el-form :model="authStore.user || {}" label-width="100px">
         <el-form-item label="用户名">
-          <el-input v-model="authStore.user.username" disabled />
+          <el-input :value="authStore.user?.username" disabled />
         </el-form-item>
         <el-form-item label="姓名">
-          <el-input v-model="authStore.user.realName" disabled />
+          <el-input :value="authStore.user?.realName" disabled />
         </el-form-item>
         <el-form-item label="角色">
-          <el-input v-model="authStore.user.role" disabled />
+          <el-input :value="authStore.user?.role" disabled />
         </el-form-item>
         <el-form-item label="邮箱">
-          <el-input v-model="authStore.user.email" disabled />
+          <el-input :value="authStore.user?.email" disabled />
         </el-form-item>
         <el-form-item label="手机号">
-          <el-input v-model="authStore.user.phone" disabled />
+          <el-input :value="authStore.user?.phone" disabled />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -175,6 +177,23 @@ const toggleSidebar = () => {
   isCollapsed.value = !isCollapsed.value
 }
 
+const handleMenuSelect = (index) => {
+  if (index === 'user-info') {
+    userInfoDialogVisible.value = true
+    return false
+  }
+  if (index === 'change-password') {
+    passwordDialogVisible.value = true
+    return false
+  }
+  if (index === 'logout') {
+    authStore.logout()
+    router.push('/login')
+    return false
+  }
+  return true
+}
+
 const handleChangePasswordClick = () => {
   passwordDialogVisible.value = true
 }
@@ -220,17 +239,25 @@ const handleChangePassword = async () => {
   border-right: 1px solid #d9ecff;
 }
 
-.logo {
-  height: 60px;
+.custom-menu-item {
   display: flex;
   align-items: center;
-  justify-content: center;
-  color: #303133;
+  padding: 0 20px;
+  height: 40px;
+  line-height: 40px;
   font-size: 14px;
-  font-weight: 600;
-  background-color: #ffffff;
-  padding: 0 16px;
-  border-bottom: 1px solid #d9ecff;
+  color: #606266;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.custom-menu-item:hover {
+  background-color: #e6f7ff;
+  color: #409eff;
+}
+
+.custom-menu-item span {
+  margin-left: 10px;
 }
 
 .logo-content {

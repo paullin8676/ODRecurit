@@ -24,10 +24,28 @@ const STAGES = [
 
 router.get('/', authenticate, async (req, res, next) => {
   try {
-    const { name, currentStage, page = 1, pageSize = 20 } = req.query;
+    const { name, currentStage, stages, page = 1, pageSize = 20 } = req.query;
+    const { Op } = require('sequelize');
+    
+    const where = {};
+    
+    if (name) {
+      where.name = { [Op.like]: `%${name}%` };
+    }
+    
+    if (currentStage) {
+      where.currentStage = currentStage;
+    } else if (stages) {
+      // 处理阶段列表参数
+      const stagesArray = Array.isArray(stages) ? stages : stages.split(',');
+      where.currentStage = { [Op.in]: stagesArray };
+    }
 
-    const candidates = await Candidate.findAll({
+    const { count, rows } = await Candidate.findAndCountAll({
+      where,
       order: [['created_at', 'DESC']],
+      limit: parseInt(pageSize),
+      offset: (parseInt(page) - 1) * parseInt(pageSize),
       include: [
         {
           model: User,
@@ -42,78 +60,12 @@ router.get('/', authenticate, async (req, res, next) => {
       ]
     });
 
-    const candidatesWithProductLines = await Promise.all(
-      candidates.map(async (candidate) => {
-        const productLines = await CandidateProductLine.findAll({
-          where: { candidateId: candidate.id },
-          include: [
-            {
-              model: Interview,
-              attributes: ['id', 'currentStage', 'finalStatus']
-            }
-          ]
-        });
-
-        const productLineDetails = [];
-        for (const pl of productLines) {
-          const productLine = await ProductLine.findByPk(pl.productLineId);
-          if (productLine) {
-            productLineDetails.push({
-              id: productLine.id,
-              name: productLine.name,
-              clientOwner: productLine.clientOwner,
-              through: {
-                id: pl.id,
-                productLineId: pl.productLineId,
-                interviewStage: pl.interviewStage,
-                recommendDate: pl.recommendDate,
-                currentStage: pl.Interview?.currentStage,
-                finalStatus: pl.Interview?.finalStatus
-              }
-            });
-          }
-        }
-
-        const candidateObj = candidate.toJSON();
-        if (candidate.lastOperator) {
-          candidateObj.lastOperator = candidate.lastOperator.toJSON();
-        }
-        candidateObj.productLines = productLineDetails;
-        return candidateObj;
-      })
-    );
-
-    let filteredCandidates = candidatesWithProductLines;
-
-    if (name) {
-      const nameLower = name.toLowerCase();
-      filteredCandidates = filteredCandidates.filter(candidate => 
-        candidate.name.toLowerCase().includes(nameLower)
-      );
-    }
-
-    if (currentStage) {
-      filteredCandidates = filteredCandidates.filter(candidate => {
-        if (candidate.productLines && candidate.productLines.length > 0) {
-          return candidate.productLines.some(productLine => 
-            productLine.through.interviewStage === currentStage
-          );
-        } else {
-          return candidate.currentStage === currentStage;
-        }
-      });
-    }
-
-    const total = filteredCandidates.length;
-    const startIndex = (parseInt(page) - 1) * parseInt(pageSize);
-    const paginatedCandidates = filteredCandidates.slice(startIndex, startIndex + parseInt(pageSize));
-
     res.json({
-      candidates: paginatedCandidates,
+      candidates: rows,
       pagination: {
         page: parseInt(page),
         pageSize: parseInt(pageSize),
-        total
+        total: count
       }
     });
   } catch (error) {

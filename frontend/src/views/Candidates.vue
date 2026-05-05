@@ -313,51 +313,13 @@ const fetchCandidates = async () => {
     const params = {
       page: pagination.page,
       pageSize: pagination.pageSize,
+      stages: availableStages.value.length > 0 ? availableStages.value : undefined,
       ...searchForm
     }
     const data = await candidateApi.getAll(params)
 
-    let candidatesList = data.candidates.map(candidate => ({
-      ...candidate,
-      currentStage: candidate.currentStage
-    }))
-
-    if (availableStages.value.length > 0) {
-      const allRelevantStages = new Set()
-      const STAGES = [
-        'candidate_entry',
-        'exam_declare',
-        'exam_complete',
-        'test_declare',
-        'test_complete',
-        'recommend_interview',
-        'qualification_interview',
-        'tech_interview_1',
-        'tech_interview_2',
-        'manager_interview',
-        'approval',
-        'offer',
-        'pending_onboarding',
-        'entry',
-        'leave'
-      ]
-
-      availableStages.value.forEach(stage => {
-        const stageIndex = STAGES.indexOf(stage)
-        if (stageIndex !== -1) {
-          for (let i = stageIndex; i < STAGES.length; i++) {
-            allRelevantStages.add(STAGES[i])
-          }
-        }
-      })
-
-      candidatesList = candidatesList.filter(candidate => {
-        return allRelevantStages.has(candidate.currentStage)
-      })
-    }
-
-    candidates.value = candidatesList
-    pagination.total = data.pagination?.total || candidatesList.length
+    candidates.value = data.candidates
+    pagination.total = data.pagination?.total
   } catch (error) {
   } finally {
     loading.value = false
@@ -573,7 +535,10 @@ const fetchConsultants = async () => {
 }
 
 onMounted(async () => {
-  await Promise.all([fetchCandidates(), fetchStageConfig(), fetchConsultants()])
+  // 先加载阶段配置和顾问数据
+  await Promise.all([fetchStageConfig(), fetchConsultants()])
+  // 然后再获取候选人列表
+  await fetchCandidates()
 })
 </script>
 

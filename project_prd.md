@@ -25,12 +25,13 @@
 
 ### 2.1 候选录入管理 (Candidate Entry)
 - **模块标识**: `candidate_entry`
-- **管理阶段**: `candidate_entry` 及所有后续阶段
+- **管理阶段**: 仅阶段配置中指定的阶段（不再包含配置阶段之后的阶段）
 - **功能**:
   - 候选人信息录入（姓名、性别、手机号、邮箱、身份证号）
   - 候选人列表查看和搜索
   - 候选人详情查看
   - 支持阶段筛选
+  - 列表API优化：移除不必要的CandidateProductLine和Interview查询，使用数据库分页
 
 ### 2.2 机考管理 (Exam Management)
 - **模块标识**: `exam_management`
@@ -675,6 +676,7 @@ node src/app.js
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| 1.6 | 2026-05-05 | 更新内容：<br>1. 候选录入模块列表获取逻辑修改：从"配置阶段+之后阶段"改为"仅配置的阶段"<br>2. 优化候选录入列表API：移除不必要的CandidateProductLine和Interview查询，避免N+1问题<br>3. 改用数据库分页（findAndCountAll），提升性能<br>4. 简化阶段筛选逻辑：仅使用候选人的currentStage<br>5. 修复前端数据加载时序：确保availableStages在fetchCandidates前加载完成 |
 | 1.5 | 2026-05-04 | 更新内容：<br>1. 候选人表新增consultantId字段，用于标识负责该候选人招聘全流程的顾问<br>2. 主管和顾问都可以作为consultant_id<br>3. 新增候选人时默认选择当前登录用户作为负责顾问<br>4. 统计报表by-consultant接口支持主管和顾问统计（剔除admin用户）<br>5. 面试管理分页功能修复<br>6. 统计数据接口修复（添加Interview和InterviewRound模型引入）<br>7. 控制台统计卡片更新：新增韧测完成、待入职统计<br>8. 饼图标签配置优化，显示小扇形标签和连接线 |
 | 1.4 | 2026-05-04 | 更新内容：<br>1. can-recommend API移除候选人当前阶段限制（blockedStages），改为检查面试记录状态<br>2. hasPassedRecord改为hasPassedOrPendingRecord，存在通过或pending状态的面试记录都不能面推<br>3. 员工阶段变更为entry或leave时，同步更新对应候选人的currentStage<br>4. 面试管理对话框新增"保存&推进"按钮功能<br>5. canAdvanceInDialog函数用于对话框内推进条件判断<br>6. 推荐面试日期显示逻辑优化（getRoundDate增加recommend_interview阶段处理）<br>7. 面试管理表格简化（移除性别和邮箱列） |
 | 1.3 | 2026-05-04 | 更新内容：<br>1. 统一后端分页响应格式（pagination对象）<br>2. 候选人列表和各阶段列表直接使用后端分页数据<br>3. 面试管理：编辑offer时不改变候选人阶段，只有点击推进才同步<br>4. can-recommend API增加面试阶段限制（blockedStages包含所有面试阶段）<br>5. 候选人推进到待入职时创建所有产品线的员工记录<br>6. offer阶段推进时创建员工记录<br>7. 优化面试管理按钮显示逻辑（编辑按钮依赖finalStatus为pending，推进按钮依赖候选人阶段和canAdvance函数）<br>8. pending_onboarding状态不显示推进和编辑按钮<br>9. 入职日期在员工管理界面填写，面试管理界面删除入职日期列 |

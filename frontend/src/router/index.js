@@ -96,6 +96,10 @@ const router = createRouter({
 router.beforeEach((to, from) => {
   const authStore = useAuthStore()
 
+  if (to.path === '/user-info' || to.path === '/change-password' || to.path === '/logout') {
+    return false
+  }
+
   if (to.meta.requiresAuth !== false && !authStore.isAuthenticated) {
     return '/login'
   } else if (to.path === '/login' && authStore.isAuthenticated) {

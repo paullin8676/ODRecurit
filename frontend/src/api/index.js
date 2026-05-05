@@ -49,7 +49,14 @@ export const examPassLineApi = {
 }
 
 export const candidateApi = {
-  getAll: (params) => api.get('/candidates', { params }),
+  getAll: (params) => {
+    // 处理数组参数，转为逗号分隔的字符串
+    const processedParams = { ...params };
+    if (processedParams.stages && Array.isArray(processedParams.stages)) {
+      processedParams.stages = processedParams.stages.join(',');
+    }
+    return api.get('/candidates', { params: processedParams });
+  },
   getById: (id) => api.get(`/candidates/${id}`),
   create: (data) => api.post('/candidates', data),
   update: (id, data) => api.put(`/candidates/${id}`, data),
