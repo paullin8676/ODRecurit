@@ -380,7 +380,8 @@ const fetchEmployees = async () => {
       page: pagination.page,
       pageSize: pagination.pageSize,
       name: searchForm.name,
-      currentStage: searchForm.currentStage
+      currentStage: searchForm.currentStage,
+      stages: availableStages.value
     }
     const data = await employeeApi.getAll(params)
 
@@ -525,8 +526,8 @@ const handleDialogClose = () => {
   })
 }
 
-onMounted(() => {
-  fetchStageConfig()
+onMounted(async () => {
+  await fetchStageConfig()
   fetchEmployees()
 })
 </script>

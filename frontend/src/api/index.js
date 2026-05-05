@@ -69,7 +69,14 @@ export const candidateApi = {
 }
 
 export const employeeApi = {
-  getAll: (params) => api.get('/employees', { params }),
+  getAll: (params) => {
+    // 处理数组参数，转为逗号分隔的字符串
+    const processedParams = { ...params };
+    if (processedParams.stages && Array.isArray(processedParams.stages)) {
+      processedParams.stages = processedParams.stages.join(',');
+    }
+    return api.get('/employees', { params: processedParams });
+  },
   getById: (id) => api.get(`/employees/${id}`),
   update: (id, data) => api.put(`/employees/${id}`, data),
   advance: (id, data) => api.put(`/employees/${id}/advance`, data),

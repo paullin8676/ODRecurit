@@ -6,15 +6,25 @@ const router = express.Router();
 
 router.get('/', authenticate, async (req, res, next) => {
   try {
-    const { page = 1, pageSize = 20, name, currentStage } = req.query;
+    const { page = 1, pageSize = 20, name, currentStage, stages } = req.query;
 
     let employeeStages = ['pending_onboarding', 'entry', 'leave'];
-    try {
-      const stageConfig = await StageConfig.findOne({ where: { module: 'employee_management' } });
-      if (stageConfig && stageConfig.config && stageConfig.config.stages && Array.isArray(stageConfig.config.stages)) {
-        employeeStages = stageConfig.config.stages;
+    // 优先使用前端传来的 stages 参数
+    if (stages) {
+      if (Array.isArray(stages)) {
+        employeeStages = stages;
+      } else if (typeof stages === 'string') {
+        employeeStages = stages.split(',').map(s => s.trim()).filter(s => s);
       }
-    } catch (e) {
+    } else {
+      // 如果没有 stages 参数，才去查询数据库
+      try {
+        const stageConfig = await StageConfig.findOne({ where: { module: 'employee_management' } });
+        if (stageConfig && stageConfig.config && stageConfig.config.stages && Array.isArray(stageConfig.config.stages)) {
+          employeeStages = stageConfig.config.stages;
+        }
+      } catch (e) {
+      }
     }
 
     const where = {
