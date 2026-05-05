@@ -85,7 +85,14 @@ export const statisticsApi = {
 }
 
 export const examApi = {
-  getAll: (params) => api.get('/exams', { params }),
+  getAll: (params) => {
+    // 处理数组参数，转为逗号分隔的字符串
+    const processedParams = { ...params };
+    if (processedParams.stages && Array.isArray(processedParams.stages)) {
+      processedParams.stages = processedParams.stages.join(',');
+    }
+    return api.get('/exams', { params: processedParams });
+  },
   getByCandidate: (candidateId) => api.get(`/exams/candidate/${candidateId}`),
   create: (data) => api.post('/exams', data),
   update: (id, data) => api.put(`/exams/${id}`, data),
@@ -93,7 +100,14 @@ export const examApi = {
 }
 
 export const testApi = {
-  getAll: (params) => api.get('/tests', { params }),
+  getAll: (params) => {
+    // 处理数组参数，转为逗号分隔的字符串
+    const processedParams = { ...params };
+    if (processedParams.stages && Array.isArray(processedParams.stages)) {
+      processedParams.stages = processedParams.stages.join(',');
+    }
+    return api.get('/tests', { params: processedParams });
+  },
   getByCandidate: (candidateId) => api.get(`/tests/candidate/${candidateId}`),
   create: (data) => api.post('/tests', data),
   update: (id, data) => api.put(`/tests/${id}`, data),

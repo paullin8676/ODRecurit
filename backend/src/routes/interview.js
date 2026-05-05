@@ -26,7 +26,7 @@ const syncCandidateStage = async (candidateId) => {
   for (const cpl of candidateProductLines) {
     if (cpl.Interview) {
       if (cpl.Interview.finalStatus === 'passed') {
-        targetStage = 'pending_onboarding';
+        targetStage = cpl.Interview.currentStage;
         break;
       } else if (cpl.Interview.finalStatus === 'pending' && targetStage === 'test_complete') {
         targetStage = cpl.Interview.currentStage;
@@ -213,7 +213,6 @@ router.put('/:id', async (req, res, next) => {
     if (interview.finalStatus !== 'failed' && interview.finalStatus !== 'passed') {
       if (rounds && Array.isArray(rounds)) {
         let hasFailed = false;
-        let offerPassed = false;
 
         for (const roundData of rounds) {
           const [round, roundCreated] = await InterviewRound.findOrCreate({
@@ -244,21 +243,16 @@ router.put('/:id', async (req, res, next) => {
           const passedValue = roundData.passed;
           if (passedValue === false || passedValue === 0) {
             hasFailed = true;
-          } else if (passedValue === true || passedValue === 1) {
-            if (roundData.stageCode === 'offer') {
-              offerPassed = true;
-            }
           }
         }
 
-        if (offerPassed) {
-          finalStatusToSet = 'passed';
-        } else if (hasFailed) {
+        if (hasFailed) {
           finalStatusToSet = 'failed';
         }
       }
     }
 
+    const oldFinalStatus = interview.finalStatus;
     await interview.update({
       currentStage: currentStage || interview.currentStage,
       finalStatus: finalStatusToSet
@@ -279,8 +273,10 @@ router.put('/:id', async (req, res, next) => {
       ]
     });
 
-    // update时不同步候选人阶段，只在advance时才同步
-    // await syncCandidateStage(updatedInterview.candidateProductLine.candidateId);
+    // 当finalStatus发生变化时（比如变成failed或passed），需要同步候选人阶段
+    if (oldFinalStatus !== finalStatusToSet) {
+      await syncCandidateStage(updatedInterview.candidateProductLine.candidateId);
+    }
 
     res.json(transformInterview(updatedInterview));
   } catch (error) {

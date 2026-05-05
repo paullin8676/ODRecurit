@@ -5,78 +5,39 @@ const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
-const STAGES = [
-  'candidate_entry',
-  'exam_declare',
-  'exam_complete',
-  'test_declare',
-  'test_complete',
-  'recommend_interview',
-  'qualification_interview',
-  'tech_interview_1',
-  'tech_interview_2',
-  'manager_interview',
-  'approval',
-  'offer',
-  'pending_onboarding',
-  'entry',
-  'leave'
-];
-
-const EXAM_STAGES = ['exam_declare', 'exam_complete'];
-
-const getStagesFrom = (startStage) => {
-  const startIndex = STAGES.indexOf(startStage);
-  if (startIndex === -1) return [];
-  return STAGES.slice(startIndex);
-};
-
-const getStagesForModule = (moduleStages) => {
-  const allStages = new Set();
-  moduleStages.forEach(stage => {
-    getStagesFrom(stage).forEach(s => allStages.add(s));
-  });
-  return Array.from(allStages);
-};
-
-const EXAM_AND_BEYOND_STAGES = getStagesForModule(EXAM_STAGES);
-
 router.get('/', authenticate, async (req, res, next) => {
   try {
-    const { page = 1, pageSize = 20, name = '', currentStage = '' } = req.query;
+    const { page = 1, pageSize = 20, name = '', currentStage = '', stages = '' } = req.query;
 
     const pageNum = parseInt(page) || 1;
     const size = parseInt(pageSize) || 20;
 
-    let candidates = [];
-
-    if (currentStage && EXAM_AND_BEYOND_STAGES.includes(currentStage)) {
-      candidates = await Candidate.findAll({
-        where: { currentStage },
-        order: [['createdAt', 'DESC']]
-      });
-    } else {
-      candidates = await Candidate.findAll({
-        where: {
-          currentStage: {
-            [Op.in]: EXAM_AND_BEYOND_STAGES
-          }
-        },
-        order: [['createdAt', 'DESC']]
-      });
-    }
-
-    let filteredCandidates = candidates;
-
+    // 构建查询条件
+    const where = {};
+    
     if (name) {
-      const nameLower = name.toLowerCase();
-      filteredCandidates = filteredCandidates.filter(c =>
-        c.name && c.name.toLowerCase().includes(nameLower)
-      );
+      where.name = { [Op.like]: `%${name}%` };
+    }
+    
+    if (currentStage) {
+      where.currentStage = currentStage;
+    } else if (stages) {
+      const stagesArray = Array.isArray(stages) ? stages : stages.split(',');
+      where.currentStage = { [Op.in]: stagesArray };
     }
 
-    const candidateIds = filteredCandidates.map(c => c.id);
+    // 使用 findAndCountAll 进行数据库分页
+    const { count, rows } = await Candidate.findAndCountAll({
+      where,
+      order: [['createdAt', 'DESC']],
+      limit: size,
+      offset: (pageNum - 1) * size,
+      include: []
+    });
 
+    const candidateIds = rows.map(c => c.id);
+
+    // 查询对应的Exam数据
     const exams = await Exam.findAll({
       where: {
         candidateId: {
@@ -93,8 +54,8 @@ router.get('/', authenticate, async (req, res, next) => {
       examMap[exam.candidateId] = exam;
     });
 
-    const resultCandidates = filteredCandidates.map(candidate => {
-      const exam = examMap[candidate.id] || new Exam({ candidateId: candidate.id });
+    const resultCandidates = rows.map(candidate => {
+      const exam = examMap[candidate.id];
       return {
         id: candidate.id,
         name: candidate.name,
@@ -119,17 +80,12 @@ router.get('/', authenticate, async (req, res, next) => {
       };
     });
 
-    const total = resultCandidates.length;
-    const startIndex = (pageNum - 1) * size;
-    const endIndex = startIndex + size;
-    const paginatedCandidates = resultCandidates.slice(startIndex, endIndex);
-
     res.json({
-      exams: paginatedCandidates,
+      exams: resultCandidates,
       pagination: {
         page: parseInt(page),
         pageSize: parseInt(pageSize),
-        total
+        total: count
       }
     });
   } catch (error) {

@@ -806,10 +806,6 @@ const canEditCurrentStage = (stage) => {
     return true
   }
 
-  if (finalStatus !== 'pending') {
-    return false
-  }
-
   const currentIndex = stageOrder.indexOf(currentStage)
   const targetIndex = stageOrder.indexOf(stage)
 

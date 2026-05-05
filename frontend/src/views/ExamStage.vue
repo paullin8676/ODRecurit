@@ -348,6 +348,7 @@ const fetchEmployees = async () => {
     const params = {
       page: pagination.page,
       pageSize: pagination.pageSize,
+      stages: availableStages.value.length > 0 ? availableStages.value : undefined,
       ...searchForm
     }
     const data = await examApi.getAll(params)
@@ -363,47 +364,9 @@ const fetchEmployees = async () => {
       exam: item.exam
     }))
     
-    // Filter employees based on stage configuration and all subsequent stages
-    if (availableStages.value.length > 0) {
-      // Get all stages that are in the configured stages or subsequent to them
-      const allRelevantStages = new Set()
-      const STAGES = [
-        'candidate_entry',
-        'exam_declare',
-        'exam_complete',
-        'test_declare',
-        'test_complete',
-        'recommend_interview',
-        'qualification_interview',
-        'tech_interview_1',
-        'tech_interview_2',
-        'manager_interview',
-        'approval',
-        'offer',
-        'pending_onboarding',
-        'entry',
-        'leave'
-      ]
-      
-      // For each configured stage, add it and all subsequent stages
-      availableStages.value.forEach(stage => {
-        const stageIndex = STAGES.indexOf(stage)
-        if (stageIndex !== -1) {
-          for (let i = stageIndex; i < STAGES.length; i++) {
-            allRelevantStages.add(STAGES[i])
-          }
-        }
-      })
-      
-      // Filter employees to include only those in relevant stages
-      transformedEmployees = transformedEmployees.filter(employee => {
-        return allRelevantStages.has(employee.currentStage)
-      })
-    }
-    
-    // Apply pagination - 使用后端返回的分页数据
+    // 直接使用后端返回的数据
     employees.value = transformedEmployees
-    pagination.total = data.pagination?.total || transformedEmployees.length
+    pagination.total = data.pagination?.total
   } catch (error) {
   } finally {
     loading.value = false
@@ -627,7 +590,10 @@ const handleAdvance = async (row) => {
 }
 
 onMounted(async () => {
-  await Promise.all([fetchEmployees(), fetchOptions(), fetchStageConfig()])
+  // 先加载阶段配置和选项
+  await Promise.all([fetchStageConfig(), fetchOptions()])
+  // 再获取列表数据
+  await fetchEmployees()
 })
 </script>
 
