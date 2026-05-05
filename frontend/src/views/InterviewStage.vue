@@ -382,13 +382,13 @@
         </template>
 
         <template v-if="shouldShowStage('approval')">
-          <el-divider content-position="left">审批</el-divider>
+          <el-divider content-position="left">租用审批</el-divider>
           <el-form :model="interviewForm" label-width="160px">
             <el-row :gutter="20">
               <el-col :span="12">
                 <el-form-item>
                   <template #label>
-                    <span>审批日期</span>
+                    <span>租用审批日期</span>
                     <span style="color: #F56C6C; margin-left: 4px;">*</span>
                   </template>
                   <el-date-picker v-model="interviewForm.rounds['approval'].scheduledDate" type="date" style="width: 100%" :disabled="!canEditCurrentStage('approval')" />
@@ -397,14 +397,14 @@
               <el-col :span="12">
                 <el-form-item>
                   <template #label>
-                    <span>审批人</span>
+                    <span>租用审批人</span>
                     <span style="color: #F56C6C; margin-left: 4px;">*</span>
                   </template>
                   <el-input v-model="interviewForm.rounds['approval'].interviewer" :disabled="!canEditCurrentStage('approval')" />
                 </el-form-item>
               </el-col>
             </el-row>
-            <el-form-item label="审批备注">
+            <el-form-item label="租用审批备注">
               <el-input v-model="interviewForm.rounds['approval'].content" type="textarea" :rows="3" :disabled="!canEditCurrentStage('approval')" />
             </el-form-item>
             <el-form-item>
@@ -1065,15 +1065,15 @@ const validateForm = (currentStage) => {
   
   if (stageIndex >= stageOrder.indexOf('approval')) {
     if (!interviewForm.rounds['approval']?.scheduledDate) {
-      ElMessage.error('请填写审批日期')
+      ElMessage.error('请填写租用审批日期')
       return false
     }
     if (!interviewForm.rounds['approval']?.interviewer) {
-      ElMessage.error('请填写审批人')
+      ElMessage.error('请填写租用审批人')
       return false
     }
     if (interviewForm.rounds['approval']?.passed === null) {
-      ElMessage.error('请选择审批是否通过')
+      ElMessage.error('请选择租用审批是否通过')
       return false
     }
   }
