@@ -122,7 +122,14 @@ export const testApi = {
 }
 
 export const interviewApi = {
-  getAll: (params) => api.get('/interviews', { params }),
+  getAll: (params) => {
+    // 处理数组参数，转为逗号分隔的字符串
+    const processedParams = { ...params };
+    if (processedParams.stages && Array.isArray(processedParams.stages)) {
+      processedParams.stages = processedParams.stages.join(',');
+    }
+    return api.get('/interviews', { params: processedParams });
+  },
   getByCandidate: (candidateId, params) => api.get(`/interviews/candidate/${candidateId}`, { params }),
   getById: (id) => api.get(`/interviews/${id}`),
   create: (data) => api.post('/interviews', data),

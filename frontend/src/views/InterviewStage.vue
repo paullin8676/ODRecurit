@@ -625,8 +625,11 @@ const fetchEmployees = async () => {
   loading.value = true
   try {
     const params = {
+      page: pagination.page,
+      pageSize: pagination.pageSize,
       currentStage: searchForm.currentStage || undefined,
-      name: searchForm.name || undefined
+      name: searchForm.name || undefined,
+      stages: availableStages.value
     }
     const data = await interviewApi.getAll(params)
     
@@ -653,8 +656,8 @@ const fetchEmployees = async () => {
       })
     }
     
-    employees.value = flattenedEmployees.slice((pagination.page - 1) * pagination.pageSize, pagination.page * pagination.pageSize)
-    pagination.total = flattenedEmployees.length
+    employees.value = flattenedEmployees
+    pagination.total = data.pagination?.total || flattenedEmployees.length
   } catch (error) {
   } finally {
     loading.value = false
@@ -1101,8 +1104,8 @@ const handleDialogClose = () => {
   Object.assign(interviewForm, initInterviewForm())
 }
 
-onMounted(() => {
-  fetchStageConfig()
+onMounted(async () => {
+  await fetchStageConfig()
   fetchEmployees()
   fetchProductLines()
 })

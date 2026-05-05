@@ -14,6 +14,19 @@ const INTERVIEW_STAGES = [
   'pending_onboarding'
 ];
 
+const STAGE_NAMES = {
+  recommend_interview: '推荐面试',
+  qualification_interview: '资面安排',
+  tech_interview_1: '技术面试(一)',
+  tech_interview_2: '技术面试(二)',
+  manager_interview: '主管面试',
+  approval: '租用审批',
+  offer: 'Offer',
+  pending_onboarding: '待入职',
+  entry: '入职',
+  leave: '离职'
+};
+
 // Helper function to sync candidate current stage
 const syncCandidateStage = async (candidateId) => {
   const candidateProductLines = await CandidateProductLine.findAll({
@@ -70,14 +83,40 @@ const transformInterview = (interview) => {
 // Get all interviews
 router.get('/', async (req, res, next) => {
   try {
-    const { currentStage, name } = req.query;
+    const { page = 1, pageSize = 20, currentStage, name, stages } = req.query;
     
-    const whereClause = {};
+    let availableStages = Object.keys(STAGE_NAMES);
+    // 优先使用前端传来的 stages 参数
+    if (stages) {
+      if (Array.isArray(stages)) {
+        availableStages = stages;
+      } else if (typeof stages === 'string') {
+        availableStages = stages.split(',').map(s => s.trim()).filter(s => s);
+      }
+    } else {
+      // 如果没有 stages 参数，从数据库读取配置
+      try {
+        const stageConfig = await StageConfig.findOne({ where: { module: 'interview_management' } });
+        if (stageConfig && stageConfig.config && stageConfig.config.stages && Array.isArray(stageConfig.config.stages)) {
+          availableStages = stageConfig.config.stages;
+        }
+      } catch (e) {
+      }
+    }
+    
+    const whereClause = {
+      currentStage: {
+        [require('sequelize').Op.in]: availableStages
+      }
+    };
     if (currentStage) {
       whereClause.currentStage = currentStage;
     }
     
-    const interviews = await Interview.findAll({
+    const limit = parseInt(pageSize);
+    const offset = (parseInt(page) - 1) * limit;
+    
+    const { count, rows } = await Interview.findAndCountAll({
       attributes: ['id', 'candidateProductLineId', 'currentStage', 'finalStatus', 'createdAt', 'updatedAt'],
       where: whereClause,
       include: [
@@ -91,10 +130,12 @@ router.get('/', async (req, res, next) => {
           as: 'rounds'
         }
       ],
-      order: [['id', 'DESC']]
+      order: [['id', 'DESC']],
+      limit,
+      offset
     });
     
-    let transformedInterviews = interviews.map(transformInterview).filter(i => i.Candidate && i.productLine);
+    let transformedInterviews = rows.map(transformInterview).filter(i => i.Candidate && i.productLine);
     
     // Apply name filter if provided
     if (name) {
@@ -105,7 +146,14 @@ router.get('/', async (req, res, next) => {
       );
     }
     
-    res.json({ interviews: transformedInterviews });
+    res.json({
+      interviews: transformedInterviews,
+      pagination: {
+        page: parseInt(page),
+        pageSize: parseInt(pageSize),
+        total: count
+      }
+    });
   } catch (error) {
     next(error);
   }

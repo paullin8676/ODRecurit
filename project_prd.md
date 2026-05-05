@@ -676,6 +676,7 @@ node src/app.js
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| 1.9 | 2026-05-05 | 更新内容：<br>1. 优化面试管理模块：与其他模块保持一致的列表获取逻辑和API优化<br>2. interviewApi.getAll增加stages数组参数处理<br>3. 面试管理前端支持传递availableStages给后端<br>4. 面试管理后端支持stages参数，优先使用前端传来的阶段配置<br>5. 面试管理后端使用findAndCountAll数据库分页<br>6. 修复面试管理数据加载时序：确保availableStages在fetchEmployees前加载完成 |
 | 1.8 | 2026-05-05 | 更新内容：<br>1. 优化员工管理模块：与其他模块保持一致的列表获取逻辑和API优化<br>2. employeeApi.getAll增加stages数组参数处理<br>3. 员工管理前端支持传递availableStages给后端<br>4. 员工管理后端支持stages参数，优先使用前端传来的阶段配置<br>5. 修复员工管理数据加载时序：确保availableStages在fetchEmployees前加载完成 |
 | 1.7 | 2026-05-05 | 更新内容：<br>1. 优化面试管理syncCandidateStage函数逻辑：当finalStatus为passed时，候选人阶段保持与interview.currentStage一致，而非强制设为pending_onboarding<br>2. 修改PUT接口逻辑：编辑保存时，仅当轮次未通过时设置finalStatus为failed，不再因为offer阶段通过就设置为passed<br>3. 修复前端canEditCurrentStage函数：删除finalStatus检查，即使finalStatus为passed，只要是当前阶段就可以编辑<br>4. 优化机考和韧测模块：与候选录入模块保持一致的列表获取逻辑和API优化<br>5. 推进接口保持不变：只有从offer推进到pending_onboarding时才设置finalStatus为passed |
 | 1.6 | 2026-05-05 | 更新内容：<br>1. 候选录入模块列表获取逻辑修改：从"配置阶段+之后阶段"改为"仅配置的阶段"<br>2. 优化候选录入列表API：移除不必要的CandidateProductLine和Interview查询，避免N+1问题<br>3. 改用数据库分页（findAndCountAll），提升性能<br>4. 简化阶段筛选逻辑：仅使用候选人的currentStage<br>5. 修复前端数据加载时序：确保availableStages在fetchCandidates前加载完成<br>6. 同步优化机考和韧测模块，保持一致的逻辑 |
