@@ -180,64 +180,66 @@ const initDatabase = async () => {
     console.error('Error creating users:', error);
   }
 
-  // Initialize StageConfig (force recreate)
+  // Initialize StageConfig (only if not exists)
   try {
-    // Delete existing stage configs
-    await StageConfig.destroy({ where: {} });
-    
-    const stageConfigs = [
-      {
-        module: 'candidate_entry',
-        stages: ['candidate_entry'],
-        stageNames: {
-          candidate_entry: '候选录入'
+    const existingCount = await StageConfig.count();
+    if (existingCount === 0) {
+      const stageConfigs = [
+        {
+          module: 'candidate_entry',
+          stages: ['candidate_entry'],
+          stageNames: {
+            candidate_entry: '候选录入'
+          }
+        },
+        {
+          module: 'exam_management',
+          stages: ['exam_declare', 'exam_complete'],
+          stageNames: {
+            exam_declare: '机考申报',
+            exam_complete: '机考完成'
+          }
+        },
+        {
+          module: 'test_management',
+          stages: ['test_declare', 'test_complete'],
+          stageNames: {
+            test_declare: '韧测申报',
+            test_complete: '韧测完成'
+          }
+        },
+        {
+          module: 'interview_management',
+          stages: ['recommend_interview', 'qualification_interview', 'tech_interview_1', 'tech_interview_2', 'manager_interview', 'approval', 'offer', 'pending_onboarding'],
+          stageNames: {
+            recommend_interview: '推荐面试',
+            qualification_interview: '资面安排',
+            tech_interview_1: '技术面试(一)',
+            tech_interview_2: '技术面试(二)',
+            manager_interview: '主管面试',
+            approval: '租用审批',
+            offer: 'Offer',
+            pending_onboarding: '待入职'
+          }
+        },
+        {
+          module: 'employee_management',
+          stages: ['pending_onboarding', 'entry', 'leave'],
+          stageNames: {
+            pending_onboarding: '待入职',
+            entry: '入职',
+            leave: '离职'
+          }
         }
-      },
-      {
-        module: 'exam_management',
-        stages: ['exam_declare', 'exam_complete'],
-        stageNames: {
-          exam_declare: '机考申报',
-          exam_complete: '机考完成'
-        }
-      },
-      {
-        module: 'test_management',
-        stages: ['test_declare', 'test_complete'],
-        stageNames: {
-          test_declare: '韧测申报',
-          test_complete: '韧测完成'
-        }
-      },
-      {
-        module: 'interview_management',
-        stages: ['recommend_interview', 'qualification_interview', 'tech_interview_1', 'tech_interview_2', 'manager_interview', 'approval', 'offer', 'pending_onboarding'],
-        stageNames: {
-          recommend_interview: '推荐面试',
-          qualification_interview: '资面安排',
-          tech_interview_1: '技术面试(一)',
-          tech_interview_2: '技术面试(二)',
-          manager_interview: '主管面试',
-          approval: '租用审批',
-          offer: 'Offer',
-          pending_onboarding: '待入职'
-        }
-      },
-      {
-        module: 'employee_management',
-        stages: ['pending_onboarding', 'entry', 'leave'],
-        stageNames: {
-          pending_onboarding: '待入职',
-          entry: '入职',
-          leave: '离职'
-        }
-      }
-    ];
+      ];
 
-    for (const config of stageConfigs) {
-      await StageConfig.create(config);
+      for (const config of stageConfigs) {
+        await StageConfig.create(config);
+      }
+      console.log('Stage configs initialized');
+    } else {
+      console.log('Stage configs already exist, skipping initialization');
     }
-    console.log('Stage configs recreated');
   } catch (error) {
     console.error('Error creating stage configs:', error);
   }
