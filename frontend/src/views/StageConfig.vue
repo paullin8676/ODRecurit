@@ -93,7 +93,7 @@ import { ElMessage } from 'element-plus'
 const route = useRoute()
 
 const stages = [
-  { key: 'employee_entry', name: '候选录入' },
+  { key: 'candidate_entry', name: '候选录入' },
   { key: 'exam_declare', name: '机考申报' },
   { key: 'exam_complete', name: '机考完成' },
   { key: 'test_declare', name: '韧测申报' },

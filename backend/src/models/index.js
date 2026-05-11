@@ -1,54 +1,24 @@
+
 const bcrypt = require('bcryptjs');
 const sequelize = require('../config/database');
 const User = require('./User');
-const { ProductLine, ProductLineUser } = require('./ProductLine');
+const BusinessLine = require('./BusinessLine');
 const ExamPaper = require('./ExamPaper');
-const TestType = require('./TestType');
-const ExamPassLine = require('./ExamPassLine');
 const Candidate = require('./Candidate');
-const CandidateProductLine = require('./CandidateProductLine');
+const CandidateStage = require('./CandidateStage');
 const Exam = require('./Exam');
 const Test = require('./Test');
 const Interview = require('./Interview');
 const InterviewRound = require('./InterviewRound');
-const ExamStage = require('./ExamStage');
 const Employee = require('./Employee');
 const StageConfig = require('./StageConfig')(sequelize);
 
 User.hasMany(User, { as: 'subordinates', foreignKey: 'managerId' });
 User.belongsTo(User, { as: 'manager', foreignKey: 'managerId' });
 
-// ProductLine and User many-to-many association (already defined in ProductLine model)
-
-// Candidate and ProductLine many-to-many association
-Candidate.belongsToMany(ProductLine, {
-  through: CandidateProductLine,
-  as: 'productLines',
-  foreignKey: 'candidateId',
-  otherKey: 'productLineId'
-});
-
-ProductLine.belongsToMany(Candidate, {
-  through: CandidateProductLine,
-  as: 'candidates',
-  foreignKey: 'productLineId',
-  otherKey: 'candidateId'
-});
-
-// CandidateProductLine additional associations
-CandidateProductLine.belongsTo(Candidate, { foreignKey: 'candidateId' });
-CandidateProductLine.belongsTo(ProductLine, { foreignKey: 'productLineId' });
-
-ExamPaper.hasMany(ExamPassLine, { foreignKey: 'examPaperId' });
-ExamPassLine.belongsTo(ExamPaper, { foreignKey: 'examPaperId' });
-
-// Candidate associations
-Candidate.hasMany(ExamStage, { foreignKey: 'candidateId' });
-ExamStage.belongsTo(Candidate, { foreignKey: 'candidateId' });
-
-// Consultant association
-User.hasMany(Candidate, { as: 'candidates', foreignKey: 'consultantId' });
-Candidate.belongsTo(User, { as: 'consultant', foreignKey: 'consultantId' });
+// Consultant association (now in CandidateStage)
+User.hasMany(CandidateStage, { as: 'managedCandidateStages', foreignKey: 'consultantId' });
+CandidateStage.belongsTo(User, { as: 'consultant', foreignKey: 'consultantId' });
 
 // New associations for Exam, Test, Interview models
 Candidate.hasOne(Exam, { foreignKey: 'candidateId' });
@@ -57,9 +27,13 @@ Exam.belongsTo(Candidate, { foreignKey: 'candidateId' });
 Candidate.hasOne(Test, { foreignKey: 'candidateId' });
 Test.belongsTo(Candidate, { foreignKey: 'candidateId' });
 
-// CandidateProductLine association with Interview
-CandidateProductLine.hasOne(Interview, { foreignKey: 'candidateProductLineId' });
-Interview.belongsTo(CandidateProductLine, { foreignKey: 'candidateProductLineId', as: 'candidateProductLine' });
+// Interview and Candidate direct association
+Candidate.hasMany(Interview, { foreignKey: 'candidateId' });
+Interview.belongsTo(Candidate, { foreignKey: 'candidateId', as: 'Candidate' });
+
+// Interview and BusinessLine association
+BusinessLine.hasMany(Interview, { foreignKey: 'businessLineId' });
+Interview.belongsTo(BusinessLine, { foreignKey: 'businessLineId', as: 'BusinessLine' });
 
 // Interview and InterviewRound associations
 Interview.hasMany(InterviewRound, { foreignKey: 'interviewId', as: 'rounds' });
@@ -69,29 +43,23 @@ InterviewRound.belongsTo(Interview, { foreignKey: 'interviewId', as: 'interview'
 ExamPaper.hasMany(Exam, { foreignKey: 'examPaperId' });
 Exam.belongsTo(ExamPaper, { foreignKey: 'examPaperId' });
 
-// TestType association with Test
-TestType.hasMany(Test, { foreignKey: 'testTypeId' });
-Test.belongsTo(TestType, { foreignKey: 'testTypeId' });
-
 // Candidate and User association (last operator)
 Candidate.belongsTo(User, { foreignKey: 'lastOperatorId', as: 'lastOperator' });
 User.hasMany(Candidate, { foreignKey: 'lastOperatorId', as: 'operatedCandidates' });
 
-// Employee and User association (last operator)
-Employee.belongsTo(User, { foreignKey: 'lastOperatorId', as: 'lastOperator' });
-User.hasMany(Employee, { foreignKey: 'lastOperatorId', as: 'operatedEmployees' });
+// CandidateStage associations
+Candidate.hasOne(CandidateStage, { foreignKey: 'candidateId' });
+CandidateStage.belongsTo(Candidate, { foreignKey: 'candidateId' });
+User.hasMany(CandidateStage, { foreignKey: 'updatedBy' });
+CandidateStage.belongsTo(User, { foreignKey: 'updatedBy', as: 'updatedByUser' });
 
-// Employee and ProductLine association
-Employee.belongsTo(ProductLine, { foreignKey: 'productLineId', as: 'productLine' });
-ProductLine.hasMany(Employee, { foreignKey: 'productLineId' });
+// Employee and BusinessLine association
+Employee.belongsTo(BusinessLine, { foreignKey: 'businessLineId', as: 'businessLine' });
+BusinessLine.hasMany(Employee, { foreignKey: 'businessLineId' });
 
 // Candidate to Employee association (when candidate enters employee management)
 Candidate.hasMany(Employee, { foreignKey: 'candidateId' });
 Employee.belongsTo(Candidate, { foreignKey: 'candidateId' });
-
-// ExamPaper association with ExamStage
-// ExamPaper.hasMany(ExamStage, { foreignKey: 'examPaperId' });
-// ExamStage.belongsTo(ExamPaper, { foreignKey: 'examPaperId' });
 
 const initDatabase = async () => {
   await sequelize.sync({ force: false, alter: false });
@@ -116,27 +84,27 @@ const initDatabase = async () => {
       console.log('Admin user already exists');
     }
 
-    // Create manager user Amin if not exists
-    let aminUser = await User.findOne({ where: { username: 'Amin' } });
+    // Create manager user Crystal if not exists
+    let aminUser = await User.findOne({ where: { username: 'Crystal' } });
     if (!aminUser) {
       const hashedPassword = await bcrypt.hash('admin123', 10);
       aminUser = await User.create({
-        username: 'Amin',
+        username: 'Crystal',
         password: hashedPassword,
         role: 'manager',
-        realName: 'Amin',
-        email: 'amin@example.com',
+        realName: 'Crystal',
+        email: 'crystal@example.com',
         phone: '13800138001',
-        managerId: adminUser.id, // Set Amin's manager to admin
+        managerId: adminUser.id, // Set Crystal's manager to admin
         isActive: true
       });
-      console.log('Manager user Amin created');
+      console.log('Manager user Crystal created');
     } else {
-      console.log('Manager user Amin already exists');
+      console.log('Manager user Crystal already exists');
     }
 
-    // Get Amin's ID
-    const amin = await User.findOne({ where: { username: 'Amin' } });
+    // Get Crystal's ID
+    const amin = await User.findOne({ where: { username: 'Crystal' } });
     if (amin) {
       // Create consultant user Lisa if not exists
       const lisaUser = await User.findOne({ where: { username: 'Lisa' } });
@@ -248,19 +216,16 @@ const initDatabase = async () => {
 module.exports = {
   sequelize,
   User,
-  ProductLine,
-  ProductLineUser,
+  BusinessLine,
   ExamPaper,
-  TestType,
-  ExamPassLine,
   Candidate,
-  CandidateProductLine,
+  CandidateStage,
   Exam,
   Test,
   Interview,
   InterviewRound,
-  ExamStage,
   Employee,
   StageConfig,
   initDatabase
 };
+

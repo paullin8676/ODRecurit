@@ -22,7 +22,7 @@
       </el-form>
 
       <el-table :data="employees" v-loading="loading" stripe>
-        <el-table-column prop="name" label="姓名" width="100" show-overflow-tooltip>
+        <el-table-column prop="name" label="姓名" width="100" show-overflow-tooltip fixed="left">
           <template #default="{ row }">
             {{ row.name }}
           </template>
@@ -38,40 +38,23 @@
           </template>
         </el-table-column>
         <el-table-column label="试卷名称" width="180">
-          <template #default="{ row, $index }">
-            <template v-if="editingRowIndex === $index">
-              <el-select v-model="editingForm.examPaperId" placeholder="请选择试卷" style="width: 100%" @change="handleExamPaperChange" @keyup.enter="handleSave($index, row)" @keyup.esc="cancelEdit">
-                <el-option
-                  v-for="paper in examPapers"
-                  :key="paper.id"
-                  :label="paper.name"
-                  :value="paper.id"
-                />
-              </el-select>
-            </template>
-            <template v-else>
-              {{ row.exam?.examPaper?.name || '-' }}
-            </template>
-          </template>
-        </el-table-column>
-        <el-table-column label="是否机考" width="100">
-          <template #default="{ row, $index }">
-            <template v-if="editingRowIndex === $index">
-              <el-switch v-model="editingForm.isOnlineExam" />
-            </template>
-            <template v-else>
-              {{ row.exam?.isOnlineExam ? '是' : '否' }}
-            </template>
+          <template #default="{ row }">
+            {{ row.exam?.examPaper?.name || '-' }}
           </template>
         </el-table-column>
         <el-table-column label="考试日期" width="120">
-          <template #default="{ row, $index }">
-            <template v-if="editingRowIndex === $index">
-              <el-date-picker v-model="editingForm.examDate" type="date" style="width: 100%" @change="handleExamDateChange" />
-            </template>
-            <template v-else>
-              {{ row.exam?.examDate ? new Date(row.exam.examDate).toLocaleDateString() : '-' }}
-            </template>
+          <template #default="{ row }">
+            {{ row.exam?.examDate ? new Date(row.exam.examDate).toLocaleDateString() : (row.exam?.examPaper?.examDate ? new Date(row.exam.examPaper.examDate).toLocaleDateString() : '-') }}
+          </template>
+        </el-table-column>
+        <el-table-column label="机考总分" width="100">
+          <template #default="{ row }">
+            {{ row.exam?.examTotalScore || row.exam?.examPaper?.totalScore || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="通过线" width="100">
+          <template #default="{ row }">
+            {{ row.exam?.passLine || row.exam?.examPaper?.passLine || '-' }}
           </template>
         </el-table-column>
         <el-table-column label="完成日期" width="120">
@@ -80,17 +63,9 @@
               <el-date-picker v-model="editingForm.examCompleteDate" type="date" style="width: 100%" />
             </template>
             <template v-else>
-              {{ row.exam?.examCompleteDate ? new Date(row.exam.examCompleteDate).toLocaleDateString() : '-' }}
-            </template>
-          </template>
-        </el-table-column>
-        <el-table-column label="机考总分" width="100">
-          <template #default="{ row, $index }">
-            <template v-if="editingRowIndex === $index">
-              <el-input v-model="editingForm.examTotalScore" style="width: 100%" :disabled="true" />
-            </template>
-            <template v-else>
-              {{ row.exam?.examTotalScore || '-' }}
+              <span @click="handleEdit(row, $index)" style="cursor: pointer;">
+                {{ row.exam?.examCompleteDate ? new Date(row.exam.examCompleteDate).toLocaleDateString() : '-' }}
+              </span>
             </template>
           </template>
         </el-table-column>
@@ -100,14 +75,23 @@
               <el-input
                 v-model="editingForm.examScore"
                 style="width: 100%"
-                @blur="validateExamScore"
+                @change="handleExamScoreChange"
                 @keyup.enter="handleSave($index, row)"
                 @keyup.esc="cancelEdit"
               />
             </template>
             <template v-else>
-              {{ row.exam?.examScore || '-' }}
+              <span @click="handleEdit(row, $index)" style="cursor: pointer;">
+                {{ row.exam?.examScore === 0 ? 0 : (row.exam?.examScore || '-') }}
+              </span>
             </template>
+          </template>
+        </el-table-column>
+        <el-table-column label="是否机考" width="100">
+          <template #default="{ row, $index }">
+            <span>
+              {{ (editingRowIndex === $index ? editingForm.isOnlineExam : row.exam?.isOnlineExam) ? '是' : '否' }}
+            </span>
           </template>
         </el-table-column>
         <el-table-column label="是否作弊" width="100">
@@ -116,17 +100,26 @@
               <el-switch v-model="editingForm.isCheating" />
             </template>
             <template v-else>
-              {{ row.exam?.isCheating ? '是' : '否' }}
+              <span @click="handleEdit(row, $index)" style="cursor: pointer;">
+                {{ row.exam?.isCheating ? '是' : '否' }}
+              </span>
             </template>
           </template>
         </el-table-column>
-        <el-table-column label="是否通过" width="100">
+        <el-table-column label="当前状态" width="100">
           <template #default="{ row, $index }">
             <template v-if="editingRowIndex === $index">
-              <el-switch v-model="editingForm.examPassed" />
+              <el-select v-model="editingForm.currentStatus" :disabled="true" style="width: 100%">
+                <el-option value="pending" label="待录分" />
+                <el-option value="passed" label="通过" />
+                <el-option value="failed" label="未通过" />
+              </el-select>
             </template>
             <template v-else>
-              {{ row.exam?.examPassed === true ? '通过' : row.exam?.examPassed === false ? '未通过' : '-' }}
+              <span v-if="row.exam?.currentStatus === 'passed'">通过</span>
+              <span v-else-if="row.exam?.currentStatus === 'failed'">未通过</span>
+              <span v-else-if="row.exam?.currentStatus === 'pending'">待录分</span>
+              <span v-else>-</span>
             </template>
           </template>
         </el-table-column>
@@ -150,6 +143,9 @@
                 </el-button>
                 <el-button v-if="canAdvance(row)" type="success" link size="small" @click="handleAdvance(row)">
                   推进
+                </el-button>
+                <el-button v-if="canRollback(row)" type="danger" link size="small" @click="handleRollback(row)">
+                  回退
                 </el-button>
               </template>
             </template>
@@ -227,8 +223,8 @@
           </el-row>
           <el-row :gutter="20">
             <el-col :span="12">
-              <el-form-item label="机考日期">
-                <el-input :value="selectedEmployee.exam?.examDate ? new Date(selectedEmployee.exam?.examDate).toLocaleDateString() : '-'" :disabled="true" />
+              <el-form-item label="考试日期">
+                <el-input :value="selectedEmployee.exam?.examDate ? new Date(selectedEmployee.exam?.examDate).toLocaleDateString() : (selectedEmployee.exam?.examPaper?.examDate ? new Date(selectedEmployee.exam?.examPaper?.examDate).toLocaleDateString() : '-')" :disabled="true" />
               </el-form-item>
             </el-col>
             <el-col :span="12">
@@ -240,7 +236,12 @@
           <el-row :gutter="20">
             <el-col :span="8">
               <el-form-item label="机考总分">
-                <el-input :value="selectedEmployee.exam?.examTotalScore || '-'" :disabled="true" />
+                <el-input :value="selectedEmployee.exam?.examTotalScore || selectedEmployee.exam?.examPaper?.totalScore || '-'" :disabled="true" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="通过线">
+                <el-input :value="selectedEmployee.exam?.passLine || selectedEmployee.exam?.examPaper?.passLine || '-'" :disabled="true" />
               </el-form-item>
             </el-col>
             <el-col :span="8">
@@ -248,6 +249,8 @@
                 <el-input :value="selectedEmployee.exam?.examScore || '-'" :disabled="true" />
               </el-form-item>
             </el-col>
+          </el-row>
+          <el-row :gutter="20">
             <el-col :span="8">
               <el-form-item label="是否作弊">
                 <el-input :value="selectedEmployee.exam?.isCheating ? '是' : '否'" :disabled="true" />
@@ -256,8 +259,19 @@
           </el-row>
           <el-row :gutter="20">
             <el-col :span="12">
-              <el-form-item label="是否通过">
-                <el-input :value="selectedEmployee.exam?.examPassed === true ? '通过' : selectedEmployee.exam?.examPassed === false ? '未通过' : '-'" :disabled="true" />
+              <el-form-item label="当前状态">
+                <template v-if="selectedEmployee.exam?.currentStatus === 'passed'">
+                  <el-input value="通过" :disabled="true" />
+                </template>
+                <template v-else-if="selectedEmployee.exam?.currentStatus === 'failed'">
+                  <el-input value="未通过" :disabled="true" />
+                </template>
+                <template v-else-if="selectedEmployee.exam?.currentStatus === 'pending'">
+                  <el-input value="待录分" :disabled="true" />
+                </template>
+                <template v-else>
+                  <el-input value="-" :disabled="true" />
+                </template>
               </el-form-item>
             </el-col>
           </el-row>
@@ -328,23 +342,23 @@ const pagination = reactive({
 
 const editingForm = reactive({
   examPaperId: null,
-  isOnlineExam: true,
+  isOnlineExam: false,
   examDate: null,
   examCompleteDate: null,
   examTotalScore: 0,
+  passLine: 0,
   isCheating: false,
   examScore: null,
-  examPassed: null
+  currentStatus: 'pending'
 })
 
 const fetchEmployees = async () => {
   loading.value = true
   try {
-    // Ensure stage config is loaded before filtering
     if (availableStages.value.length === 0) {
       await fetchStageConfig()
     }
-    
+
     const params = {
       page: pagination.page,
       pageSize: pagination.pageSize,
@@ -352,7 +366,7 @@ const fetchEmployees = async () => {
       ...searchForm
     }
     const data = await examApi.getAll(params)
-    
+
     let transformedEmployees = data.exams.map(item => ({
       id: item.id,
       name: item.name,
@@ -363,8 +377,7 @@ const fetchEmployees = async () => {
       currentStage: item.currentStage || '',
       exam: item.exam
     }))
-    
-    // 直接使用后端返回的数据
+
     employees.value = transformedEmployees
     pagination.total = data.pagination?.total
   } catch (error) {
@@ -418,15 +431,17 @@ const handlePageSizeChange = (size) => {
 
 const handleEdit = (row, index) => {
   editingRowIndex.value = index
+
   Object.assign(editingForm, {
     examPaperId: row.exam.examPaperId,
-    isOnlineExam: row.exam.isOnlineExam,
+    isOnlineExam: row.exam.isOnlineExam || false,
     examDate: row.exam.examDate,
     examCompleteDate: row.exam.examCompleteDate,
-    examTotalScore: row.exam.examTotalScore,
-    isCheating: row.exam.isCheating,
+    examTotalScore: row.exam.examTotalScore || row.exam.examPaper?.totalScore || 0,
+    passLine: row.exam.examPaper?.passLine || 0,
+    isCheating: row.exam.isCheating || false,
     examScore: row.exam.examScore,
-    examPassed: row.exam.examPassed
+    currentStatus: row.exam.currentStatus || 'pending'
   })
 }
 
@@ -435,17 +450,22 @@ const cancelEdit = () => {
   examScoreError.value = false
   Object.assign(editingForm, {
     examPaperId: null,
-    isOnlineExam: true,
+    isOnlineExam: false,
     examDate: null,
     examCompleteDate: null,
     examTotalScore: 0,
+    passLine: 0,
     isCheating: false,
     examScore: null,
-    examPassed: null
+    currentStatus: 'pending'
   })
 }
 
 const handleSave = async (index, row) => {
+  if (examScoreError.value) {
+    return
+  }
+  
   if (!validateExamScore()) {
     return
   }
@@ -458,6 +478,7 @@ const handleSave = async (index, row) => {
 
     await examApi.create(examData)
     ElMessage.success('保存成功')
+    
     editingRowIndex.value = -1
     fetchEmployees()
   } catch (error) {
@@ -469,6 +490,45 @@ const handleExamPaperChange = (examPaperId) => {
   const selectedPaper = examPapers.value.find(paper => paper.id === examPaperId)
   if (selectedPaper) {
     editingForm.examTotalScore = selectedPaper.totalScore
+    editingForm.passLine = selectedPaper.passLine
+    editingForm.examDate = selectedPaper.examDate
+  }
+}
+
+const handleExamScoreChange = () => {
+  const score = editingForm.examScore
+  const totalScore = editingForm.examTotalScore
+  
+  if (score !== null && score !== '' && score !== undefined) {
+    const numScore = parseInt(score, 10)
+    
+    if (!isNaN(numScore)) {
+      if (numScore < 0) {
+        examScoreError.value = true
+        ElMessage.error('实际得分不能为负数')
+        editingForm.examScore = ''
+        return
+      }
+      
+      if (totalScore >= 0 && numScore > totalScore) {
+        examScoreError.value = true
+        ElMessage.error('实际得分不能大于机考总分')
+        editingForm.examScore = ''
+        return
+      }
+      
+      examScoreError.value = false
+      editingForm.isOnlineExam = true
+      if (numScore >= editingForm.passLine) {
+        editingForm.currentStatus = 'passed'
+      } else {
+        editingForm.currentStatus = 'failed'
+      }
+    }
+  } else {
+    examScoreError.value = false
+    editingForm.isOnlineExam = false
+    editingForm.currentStatus = 'pending'
   }
 }
 
@@ -495,7 +555,7 @@ const validateExamScore = () => {
     return false
   }
 
-  if (totalScore && numScore > totalScore) {
+  if (totalScore >= 0 && numScore > totalScore) {
     examScoreError.value = true
     ElMessage.error('实际得分不能大于机考总分')
     return false
@@ -514,31 +574,26 @@ const handleExamDateChange = (examDate) => {
 
 const handleView = async (row) => {
   try {
-    // 先确保 selectedEmployee 不为 null
     selectedEmployee.value = null
-    
+
     const data = await candidateApi.getById(row.id)
     if (!data.candidate) {
       ElMessage.error('获取员工信息失败')
       return
     }
-    
-    // 创建一个新的对象，避免直接修改响应式对象
+
     const candidateWithExam = { ...data.candidate }
-    
-    // Get exam data for this candidate
+
     const examData = await examApi.getByCandidate(row.id)
     if (examData.exam) {
       candidateWithExam.exam = {
         ...examData.exam,
-        examPaper: examData.exam.ExamPaper // 转换 ExamPaper 为 examPaper
+        examPaper: examData.exam.ExamPaper
       }
     }
-    
-    // 一次性设置 selectedEmployee，避免中间状态
+
     selectedEmployee.value = candidateWithExam
-    
-    // 最后设置 dialogVisible
+
     dialogVisible.value = true
   } catch (error) {
     ElMessage.error('获取员工信息失败')
@@ -551,32 +606,42 @@ const handleDialogClose = () => {
 }
 
 const canAdvance = (row) => {
-  // 除了离职阶段外，其他阶段都可以推进
-  if (row.currentStage === 'leave') {
-    return false
-  }
-  
-  // 检查机考记录是否存在
   if (!row.exam) {
     return false
   }
-  
-  // 检查所有必填字段是否已填写
+
   const exam = row.exam
-  return !!exam.examPaperId && // 试卷名称
-         typeof exam.isOnlineExam === 'boolean' && // 是否机考
-         !!exam.examDate && // 机考日期
-         !!exam.examCompleteDate && // 完成日期
-         !!exam.examTotalScore && // 机考总分
-         exam.examScore !== null && exam.examScore !== undefined && // 实际得分
-         typeof exam.isCheating === 'boolean' && // 是否作弊
-         typeof exam.examPassed === 'boolean' && // 是否通过
-         exam.examPassed === true // 只有通过才可以推进
+  return exam.currentStatus === 'passed' && exam.isCheating === false
 }
 
 const isCurrentStage = (row) => {
-  // 检查记录是否处于该模块的配置阶段中
   return availableStages.value.includes(row.currentStage)
+}
+
+const canRollback = (row) => {
+  return row.currentStage !== 'candidate_entry' && row.currentStage !== 'leave'
+}
+
+const handleRollback = async (row) => {
+  try {
+    if (row.exam) {
+      await examApi.delete(row.exam.id)
+    }
+    
+    await candidateApi.update(row.id, { 
+      name: row.name, 
+      gender: row.gender,
+      phone: row.phone,
+      email: row.email,
+      idCard: row.idCard,
+      currentStage: 'candidate_entry' 
+    })
+    
+    ElMessage.success('回退成功，已将候选人阶段切换为候选录入')
+    fetchEmployees()
+  } catch (error) {
+    ElMessage.error(error.message || '回退失败')
+  }
 }
 
 const handleAdvance = async (row) => {
@@ -590,9 +655,7 @@ const handleAdvance = async (row) => {
 }
 
 onMounted(async () => {
-  // 先加载阶段配置和选项
   await Promise.all([fetchStageConfig(), fetchOptions()])
-  // 再获取列表数据
   await fetchEmployees()
 })
 </script>

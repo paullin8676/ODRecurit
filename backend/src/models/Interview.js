@@ -7,27 +7,30 @@ const Interview = sequelize.define('Interview', {
     primaryKey: true,
     autoIncrement: true
   },
-  candidateProductLineId: {
+  candidateId: {
     type: DataTypes.INTEGER,
     allowNull: false,
     unique: true,
     references: {
-      model: 'CandidateProductLine',
+      model: 'candidate',
       key: 'id'
     }
   },
-  currentStage: {
-    type: DataTypes.STRING(50),
-    allowNull: false,
-    defaultValue: 'recommend_interview'
+  businessLineId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'business_line',
+      key: 'id'
+    }
   },
-  finalStatus: {
+  currentStatus: {
     type: DataTypes.STRING(20),
     allowNull: false,
-    defaultValue: 'pending'
+    defaultValue: 'progressing'
   }
 }, {
-  tableName: 'Interview',
+  tableName: 'interview',
   timestamps: true,
   underscored: true
 });

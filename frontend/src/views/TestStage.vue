@@ -22,7 +22,7 @@
       </el-form>
 
       <el-table :data="employees" v-loading="loading" stripe>
-        <el-table-column prop="name" label="姓名" width="100" show-overflow-tooltip>
+        <el-table-column prop="name" label="姓名" width="100" show-overflow-tooltip fixed="left">
           <template #default="{ row }">
             {{ row.name }}
           </template>
@@ -37,41 +37,19 @@
             {{ row.currentStage ? stageNames[row.currentStage] : '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="韧测类型" width="120">
-          <template #default="{ row, $index }">
-            <template v-if="editingRowIndex === $index">
-              <el-select v-model="editingForm.testTypeId" placeholder="请选择类型" style="width: 100%" @keyup.enter="handleSave($index, row)" @keyup.esc="cancelEdit">
-                <el-option
-                  v-for="type in testTypes"
-                  :key="type.id"
-                  :label="type.name"
-                  :value="type.id"
-                />
-              </el-select>
-            </template>
-            <template v-else>
-              {{ row.test?.testType?.name || '-' }}
-            </template>
+        <el-table-column label="下发日期" width="120">
+          <template #default="{ row }">
+            <span>{{ row.test?.issueDate ? new Date(row.test.issueDate).toLocaleDateString() : '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="韧测日期" width="120">
+        <el-table-column label="情绪分" width="100">
           <template #default="{ row, $index }">
             <template v-if="editingRowIndex === $index">
-              <el-date-picker v-model="editingForm.testDate" type="date" style="width: 100%" />
+              <el-input v-model="editingForm.emotionScore" style="width: 100%" @keyup.enter="handleSave($index, row)" @keyup.esc="cancelEdit" />
             </template>
-            <template v-else>
-              {{ row.test?.testDate ? new Date(row.test.testDate).toLocaleDateString() : '-' }}
-            </template>
-          </template>
-        </el-table-column>
-        <el-table-column label="完成日期" width="120">
-          <template #default="{ row, $index }">
-            <template v-if="editingRowIndex === $index">
-              <el-date-picker v-model="editingForm.testCompleteDate" type="date" style="width: 100%" />
-            </template>
-            <template v-else>
-              {{ row.test?.testCompleteDate ? new Date(row.test.testCompleteDate).toLocaleDateString() : '-' }}
-            </template>
+            <span v-else style="cursor: pointer;" @click="handleEdit(row, $index)">
+              {{ row.test?.emotionScore || '-' }}
+            </span>
           </template>
         </el-table-column>
         <el-table-column label="忧虑值" width="100">
@@ -79,9 +57,9 @@
             <template v-if="editingRowIndex === $index">
               <el-input v-model="editingForm.worryValue" style="width: 100%" @keyup.enter="handleSave($index, row)" @keyup.esc="cancelEdit" />
             </template>
-            <template v-else>
+            <span v-else style="cursor: pointer;" @click="handleEdit(row, $index)">
               {{ row.test?.worryValue || '-' }}
-            </template>
+            </span>
           </template>
         </el-table-column>
         <el-table-column label="乐观值" width="100">
@@ -89,9 +67,9 @@
             <template v-if="editingRowIndex === $index">
               <el-input v-model="editingForm.optimismValue" style="width: 100%" @keyup.enter="handleSave($index, row)" @keyup.esc="cancelEdit" />
             </template>
-            <template v-else>
+            <span v-else style="cursor: pointer;" @click="handleEdit(row, $index)">
               {{ row.test?.optimismValue || '-' }}
-            </template>
+            </span>
           </template>
         </el-table-column>
         <el-table-column label="一致性" width="100">
@@ -99,18 +77,23 @@
             <template v-if="editingRowIndex === $index">
               <el-input v-model="editingForm.consistency" style="width: 100%" @keyup.enter="handleSave($index, row)" @keyup.esc="cancelEdit" />
             </template>
-            <template v-else>
+            <span v-else style="cursor: pointer;" @click="handleEdit(row, $index)">
               {{ row.test?.consistency || '-' }}
-            </template>
+            </span>
           </template>
         </el-table-column>
-        <el-table-column label="是否通过" width="100">
+        <el-table-column label="当前状态" width="100">
           <template #default="{ row, $index }">
             <template v-if="editingRowIndex === $index">
-              <el-switch v-model="editingForm.testPassed" />
+              <el-select v-model="editingForm.currentStatus" style="width: 100%">
+                <el-option label="待录分" value="pending" />
+                <el-option label="放弃" value="abandoned" />
+                <el-option label="通过" value="passed" />
+                <el-option label="未通过" value="failed" />
+              </el-select>
             </template>
             <template v-else>
-              {{ row.test?.testPassed === true ? '通过' : row.test?.testPassed === false ? '未通过' : '-' }}
+              <span style="cursor: pointer;" @click="handleEdit(row, $index)">{{ getStatusText(row.test?.currentStatus) }}</span>
             </template>
           </template>
         </el-table-column>
@@ -128,18 +111,18 @@
               <el-button type="info" link size="small" @click="handleView(row)">
                 查看
               </el-button>
-              <template v-if="isCurrentStage(row)">
+              <template v-if="isCurrentStage(row.currentStage)">
                 <el-button type="primary" link size="small" @click="handleEdit(row, $index)">
                   编辑
                 </el-button>
-                <template v-if="canAdvance(row)" type="success" link size="small" @click="handleAdvance(row)">
+                <template v-if="canAdvance(row)">
                   <el-button type="success" link size="small" @click="handleAdvance(row)">
                     推进
                   </el-button>
                 </template>
               </template>
-              <!-- 韧测完成及之后阶段且韧测通过显示面推按钮 -->
-              <template v-if="isAfterTestComplete(row) && row.canRecommend && row.test?.testPassed === true">
+              <!-- 只有当前阶段为韧测完成且韧测通过且没有面试记录时显示面推按钮 -->
+              <template v-if="row.currentStage === 'test_complete' && row.canRecommend && row.test?.currentStatus === 'passed'">
                 <el-button type="success" link size="small" @click="handlePushInterview(row)">
                   面推
                 </el-button>
@@ -205,116 +188,65 @@
 
         <!-- 韧测申报阶段字段 -->
         <el-divider content-position="left">韧测信息</el-divider>
-        <el-form :model="testForm" label-width="140px" :disabled="!isCurrentStage(selectedEmployee.currentStage)">
+        <el-form :model="testForm" label-width="140px" disabled>
           <!-- 韧测申报阶段字段 -->
           <el-row :gutter="20">
             <el-col :span="12">
-              <el-form-item label="韧测类型">
-                <el-select v-model="testForm.testTypeId" placeholder="请选择类型" style="width: 100%" :disabled="!isCurrentStage(selectedEmployee.currentStage)">
-                  <el-option
-                    v-for="type in testTypes"
-                    :key="type.id"
-                    :label="type.name"
-                    :value="type.id"
-                  />
-                </el-select>
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
               <el-form-item label="韧测日期">
-                <el-date-picker v-model="testForm.testDate" type="date" style="width: 100%" :disabled="!isCurrentStage(selectedEmployee.currentStage)" />
+                <el-date-picker v-model="testForm.issueDate" type="date" style="width: 100%" disabled />
               </el-form-item>
             </el-col>
           </el-row>
           
           <!-- 韧测完成阶段及后续阶段显示的字段 -->
           <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="完成日期">
-                <el-date-picker v-model="testForm.testCompleteDate" type="date" style="width: 100%" :disabled="!isCurrentStage(selectedEmployee.currentStage)" />
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="20">
             <el-col :span="8">
               <el-form-item label="忧虑值">
-                <el-input v-model="testForm.worryValue" style="width: 100%" :disabled="!isCurrentStage(selectedEmployee.currentStage)" />
+                <el-input v-model="testForm.worryValue" style="width: 100%" disabled />
               </el-form-item>
             </el-col>
             <el-col :span="8">
               <el-form-item label="乐观值">
-                <el-input v-model="testForm.optimismValue" style="width: 100%" :disabled="!isCurrentStage(selectedEmployee.currentStage)" />
+                <el-input v-model="testForm.optimismValue" style="width: 100%" disabled />
               </el-form-item>
             </el-col>
             <el-col :span="8">
               <el-form-item label="一致性">
-                <el-input v-model="testForm.consistency" style="width: 100%" :disabled="!isCurrentStage(selectedEmployee.currentStage)" />
+                <el-input v-model="testForm.consistency" style="width: 100%" disabled />
               </el-form-item>
             </el-col>
           </el-row>
           <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="是否通过">
-                <el-radio-group v-model="testForm.testPassed" :disabled="!isCurrentStage(selectedEmployee.currentStage)">
-                  <el-radio :label="true">通过</el-radio>
-                  <el-radio :label="false">未通过</el-radio>
-                </el-radio-group>
+            <el-col :span="8">
+              <el-form-item label="情绪分">
+                <el-input v-model="testForm.emotionScore" style="width: 100%" disabled />
+              </el-form-item>
+            </el-col>
+            <el-col :span="16">
+              <el-form-item label="当前状态">
+                <el-select v-model="testForm.currentStatus" style="width: 100%" disabled>
+                  <el-option label="待录分" value="pending" />
+                  <el-option label="放弃" value="abandoned" />
+                  <el-option label="通过" value="passed" />
+                  <el-option label="未通过" value="failed" />
+                </el-select>
               </el-form-item>
             </el-col>
           </el-row>
         </el-form>
       </div>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSubmit" :loading="submitLoading">
-          确定
-        </el-button>
+        <el-button @click="dialogVisible = false">关闭</el-button>
       </template>
     </el-dialog>
 
-    <!-- 面推对话框 -->
-    <el-dialog
-      v-model="pushDialogVisible"
-      title="面推"
-      width="500px"
-      @close="handlePushDialogClose"
-    >
-      <div v-if="pushCandidate">
-        <el-form :model="pushForm" label-width="120px">
-          <el-form-item label="候选人">
-            <el-input :value="pushCandidate.name" :disabled="true" />
-          </el-form-item>
-          <el-form-item label="产品线" required>
-            <el-select v-model="pushForm.productLineId" placeholder="请选择产品线" style="width: 100%" @change="handleProductLineChange">
-              <el-option
-                v-for="pl in availableProductLines"
-                :key="pl.id"
-                :label="pl.name"
-                :value="pl.id"
-              />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="产品负责人">
-            <el-input v-model="pushForm.clientOwner" :disabled="true" />
-          </el-form-item>
-          <el-form-item label="推荐日期" required>
-            <el-date-picker v-model="pushForm.recommendDate" type="date" style="width: 100%" />
-          </el-form-item>
-        </el-form>
-      </div>
-      <template #footer>
-        <el-button @click="pushDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handlePushConfirm" :loading="pushLoading">
-          确定
-        </el-button>
-      </template>
-    </el-dialog>
+
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { candidateApi, testTypeApi, testApi, stageConfigApi } from '../api'
+import { candidateApi, testApi, stageConfigApi } from '../api'
 import { ElMessage } from 'element-plus'
 import { Search, Refresh } from '@element-plus/icons-vue'
 
@@ -372,28 +304,18 @@ const dialogVisible = ref(false)
 const dialogTitle = ref('编辑韧测信息')
 const submitLoading = ref(false)
 const selectedEmployee = ref(null)
-const testTypes = ref([])
 const editingRowIndex = ref(-1)
 const editingForm = reactive({
-  testTypeId: null,
-  testDate: null,
-  testCompleteDate: null,
+  issueDate: null,
   worryValue: null,
   optimismValue: null,
   consistency: null,
-  testPassed: null
+  emotionScore: null,
+  currentStatus: 'pending'
 })
 
-// 面推对话框相关
-const pushDialogVisible = ref(false)
-const pushCandidate = ref(null)
+// 面推相关
 const pushLoading = ref(false)
-const availableProductLines = ref([])
-const pushForm = reactive({
-  productLineId: null,
-  clientOwner: '',
-  recommendDate: new Date()
-})
 
 const searchForm = reactive({
   name: '',
@@ -407,13 +329,12 @@ const pagination = reactive({
 })
 
 const testForm = reactive({
-  testTypeId: null,
-  testDate: null,
-  testCompleteDate: null,
+  issueDate: null,
   worryValue: null,
   optimismValue: null,
   consistency: null,
-  testPassed: null
+  emotionScore: null,
+  currentStatus: 'pending'
 })
 
 const fetchEmployees = async () => {
@@ -481,13 +402,7 @@ const fetchStageConfig = async () => {
   }
 }
 
-const fetchOptions = async () => {
-  try {
-    const types = await testTypeApi.getAll()
-    testTypes.value = types.testTypes || []
-  } catch (error) {
-  }
-}
+
 
 const handleSearch = () => {
   pagination.page = 1
@@ -523,13 +438,12 @@ const handleView = async (row) => {
     } else {
       // Reset form if no test data
       Object.assign(testForm, {
-        testTypeId: null,
-        testDate: null,
-        testCompleteDate: null,
-        worryValue: null,
-        optimismValue: null,
+      issueDate: null,
+      worryValue: null,
+      optimismValue: null,
         consistency: null,
-        testPassed: null
+        emotionScore: null,
+        currentStatus: 'pending'
       })
     }
     
@@ -564,9 +478,7 @@ const handleSubmit = async () => {
 const handleDialogClose = () => {
   selectedEmployee.value = null
   Object.assign(testForm, {
-    testTypeId: null,
-    testDate: null,
-    testCompleteDate: null,
+    issueDate: null,
     worryValue: null,
     optimismValue: null,
     consistency: null,
@@ -588,51 +500,59 @@ const canAdvance = (row) => {
   }
 
   const test = row.test
-  return test.testTypeId !== null && test.testTypeId !== undefined &&
-         test.testDate !== null && test.testDate !== undefined &&
-         test.testCompleteDate !== null && test.testCompleteDate !== undefined &&
+  return test.issueDate !== null && test.issueDate !== undefined &&
          test.worryValue !== null && test.worryValue !== undefined &&
          test.optimismValue !== null && test.optimismValue !== undefined &&
          test.consistency !== null && test.consistency !== undefined &&
-         typeof test.testPassed === 'boolean' &&
-         test.testPassed === true
+         test.emotionScore !== null && test.emotionScore !== undefined &&
+         test.currentStatus === 'passed'
 }
 
-const isCurrentStage = (row) => {
+const isCurrentStage = (currentStage) => {
   // 检查记录是否处于该模块的配置阶段中
-  return availableStages.value.includes(row.currentStage)
+  if (!currentStage) return false
+  return availableStages.value.includes(currentStage)
 }
 
 const isAfterTestComplete = (row) => {
   // 检查是否处于韧测完成及之后阶段
+  if (!row || !row.currentStage) return false
   const testCompleteIndex = STAGES.indexOf('test_complete')
   const currentIndex = STAGES.indexOf(row.currentStage)
   return currentIndex >= testCompleteIndex
 }
 
+const getStatusText = (status) => {
+  const statusMap = {
+    'pending': '待录分',
+    'abandoned': '放弃',
+    'passed': '通过',
+    'failed': '未通过'
+  }
+  return statusMap[status] || '-'
+}
+
 const handleEdit = (row, index) => {
   editingRowIndex.value = index
   Object.assign(editingForm, {
-    testTypeId: row.test.testTypeId,
-    testDate: row.test.testDate,
-    testCompleteDate: row.test.testCompleteDate,
+    issueDate: row.test.issueDate,
     worryValue: row.test.worryValue,
     optimismValue: row.test.optimismValue,
     consistency: row.test.consistency,
-    testPassed: row.test.testPassed
+    emotionScore: row.test.emotionScore,
+    currentStatus: row.test.currentStatus || 'pending'
   })
 }
 
 const cancelEdit = () => {
   editingRowIndex.value = -1
   Object.assign(editingForm, {
-    testTypeId: null,
-    testDate: null,
-    testCompleteDate: null,
+    issueDate: null,
     worryValue: null,
     optimismValue: null,
     consistency: null,
-    testPassed: null
+    emotionScore: null,
+    currentStatus: 'pending'
   })
 }
 
@@ -672,72 +592,24 @@ const handlePushInterview = async (row) => {
       return
     }
     
-    pushCandidate.value = row
-    availableProductLines.value = result.availableProductLines || []
-    
-    if (availableProductLines.value.length === 0) {
-      ElMessage.warning('没有可用的产品线')
-      return
+    pushLoading.value = true
+    try {
+      await candidateApi.pushInterview(row.id, {})
+      ElMessage.success('面推成功')
+      fetchEmployees()
+    } catch (error) {
+      ElMessage.error(error.message || '面推失败')
+    } finally {
+      pushLoading.value = false
     }
-    
-    Object.assign(pushForm, {
-      productLineId: null,
-      clientOwner: '',
-      recommendDate: new Date()
-    })
-    
-    pushDialogVisible.value = true
   } catch (error) {
     ElMessage.error('获取数据失败')
   }
 }
 
-const handleProductLineChange = (productLineId) => {
-  const selected = availableProductLines.value.find(pl => pl.id === productLineId)
-  if (selected) {
-    pushForm.clientOwner = selected.clientOwner || ''
-  } else {
-    pushForm.clientOwner = ''
-  }
-}
-
-const handlePushConfirm = async () => {
-  if (!pushCandidate.value || !pushForm.productLineId) {
-    ElMessage.error('请选择产品线')
-    return
-  }
-  
-  pushLoading.value = true
-  try {
-    const data = {
-      productLineId: pushForm.productLineId,
-      recommendDate: pushForm.recommendDate
-    }
-    
-    await candidateApi.pushInterview(pushCandidate.value.id, data)
-    ElMessage.success('面推成功')
-    pushDialogVisible.value = false
-    fetchEmployees()
-  } catch (error) {
-    ElMessage.error(error.message || '面推失败')
-  } finally {
-    pushLoading.value = false
-  }
-}
-
-const handlePushDialogClose = () => {
-  pushCandidate.value = null
-  availableProductLines.value = []
-  Object.assign(pushForm, {
-    productLineId: null,
-    clientOwner: '',
-    recommendDate: new Date()
-  })
-}
-
 onMounted(async () => {
-  // 先加载阶段配置和选项
-  await Promise.all([fetchStageConfig(), fetchOptions()])
+  // 先加载阶段配置
+  await fetchStageConfig()
   // 再获取列表数据
   await fetchEmployees()
 })

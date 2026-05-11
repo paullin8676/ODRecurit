@@ -1,10 +1,10 @@
 <template>
   <div class="page-container">
     <div class="page-header">
-      <h2 class="page-title">试卷配置</h2>
+      <h2 class="page-title">机考配置</h2>
       <el-button type="primary" @click="handleCreate" v-if="authStore.isManager">
         <el-icon><Plus /></el-icon>
-        新增试卷
+        新增机考配置
       </el-button>
     </div>
 
@@ -12,6 +12,16 @@
       <el-table :data="examPapers" v-loading="loading" stripe>
         <el-table-column prop="name" label="试卷名称" width="200" />
         <el-table-column prop="totalScore" label="总分" width="100" />
+        <el-table-column prop="passLine" label="通过线" width="100">
+          <template #default="{ row }">
+            <span style="color: #67c23a; font-weight: 600">{{ row.passLine }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="examDate" label="机考日期" width="120">
+          <template #default="{ row }">
+            {{ row.examDate ? formatDate(row.examDate) : '-' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="description" label="描述" />
         <el-table-column prop="isActive" label="状态" width="80">
           <template #default="{ row }">
@@ -38,6 +48,12 @@
         <el-form-item label="总分" prop="totalScore">
           <el-input-number v-model="form.totalScore" :min="0" style="width: 100%" />
         </el-form-item>
+        <el-form-item label="通过线" prop="passLine">
+          <el-input-number v-model="form.passLine" :min="0" :max="100" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="机考日期" prop="examDate">
+          <el-date-picker v-model="form.examDate" type="date" style="width: 100%" />
+        </el-form-item>
         <el-form-item label="描述" prop="description">
           <el-input v-model="form.description" type="textarea" :rows="3" />
         </el-form-item>
@@ -62,7 +78,7 @@ const authStore = useAuthStore()
 const examPapers = ref([])
 const loading = ref(false)
 const dialogVisible = ref(false)
-const dialogTitle = ref('新增试卷')
+const dialogTitle = ref('新增机考配置')
 const submitLoading = ref(false)
 const formRef = ref()
 const currentId = ref(null)
@@ -71,11 +87,21 @@ const isEdit = ref(false)
 const form = reactive({
   name: '',
   totalScore: 100,
+  passLine: 60,
+  examDate: null,
   description: ''
 })
 
 const rules = {
-  name: [{ required: true, message: '请输入试卷名称', trigger: 'blur' }]
+  name: [{ required: true, message: '请输入机考配置名称', trigger: 'blur' }],
+  totalScore: [{ required: true, message: '请输入总分', trigger: 'blur' }],
+  passLine: [{ required: true, message: '请输入通过线', trigger: 'blur' }],
+  examDate: [{ required: true, message: '请选择机考日期', trigger: 'change' }]
+}
+
+const formatDate = (date) => {
+  if (!date) return '-'
+  return new Date(date).toLocaleDateString('zh-CN')
 }
 
 const fetchExamPapers = async () => {
@@ -91,18 +117,20 @@ const fetchExamPapers = async () => {
 }
 
 const handleCreate = () => {
-  dialogTitle.value = '新增试卷'
+  dialogTitle.value = '新增机考配置'
   isEdit.value = false
   dialogVisible.value = true
 }
 
 const handleEdit = (row) => {
-  dialogTitle.value = '编辑试卷'
+  dialogTitle.value = '编辑机考配置'
   isEdit.value = true
   currentId.value = row.id
   Object.assign(form, {
     name: row.name,
     totalScore: row.totalScore,
+    passLine: row.passLine,
+    examDate: row.examDate ? new Date(row.examDate) : '',
     description: row.description
   })
   dialogVisible.value = true
@@ -136,6 +164,11 @@ const handleSubmit = async () => {
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
 
+  if (form.passLine > form.totalScore) {
+    ElMessage.error('通过线必须小于或等于总分')
+    return
+  }
+
   submitLoading.value = true
   try {
     if (isEdit.value) {
@@ -159,6 +192,8 @@ const handleDialogClose = () => {
   Object.assign(form, {
     name: '',
     totalScore: 100,
+    passLine: 60,
+    examDate: null,
     description: ''
   })
 }

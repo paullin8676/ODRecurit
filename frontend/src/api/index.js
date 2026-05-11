@@ -16,12 +16,12 @@ export const userApi = {
   delete: (id) => api.delete(`/users/${id}`)
 }
 
-export const productLineApi = {
-  getAll: (params) => api.get('/product-lines', { params }),
-  getById: (id) => api.get(`/product-lines/${id}`),
-  create: (data) => api.post('/product-lines', data),
-  update: (id, data) => api.put(`/product-lines/${id}`, data),
-  delete: (id) => api.delete(`/product-lines/${id}`)
+export const businessLineApi = {
+  getAll: (params) => api.get('/business-lines', { params }),
+  getById: (id) => api.get(`/business-lines/${id}`),
+  create: (data) => api.post('/business-lines', data),
+  update: (id, data) => api.put(`/business-lines/${id}`, data),
+  delete: (id) => api.delete(`/business-lines/${id}`)
 }
 
 export const examPaperApi = {
@@ -30,22 +30,6 @@ export const examPaperApi = {
   create: (data) => api.post('/exam-papers', data),
   update: (id, data) => api.put(`/exam-papers/${id}`, data),
   delete: (id) => api.delete(`/exam-papers/${id}`)
-}
-
-export const testTypeApi = {
-  getAll: (params) => api.get('/test-types', { params }),
-  getById: (id) => api.get(`/test-types/${id}`),
-  create: (data) => api.post('/test-types', data),
-  update: (id, data) => api.put(`/test-types/${id}`, data),
-  delete: (id) => api.delete(`/test-types/${id}`)
-}
-
-export const examPassLineApi = {
-  getAll: (params) => api.get('/exam-pass-lines', { params }),
-  getById: (id) => api.get(`/exam-pass-lines/${id}`),
-  create: (data) => api.post('/exam-pass-lines', data),
-  update: (id, data) => api.put(`/exam-pass-lines/${id}`, data),
-  delete: (id) => api.delete(`/exam-pass-lines/${id}`)
 }
 
 export const candidateApi = {
@@ -63,7 +47,7 @@ export const candidateApi = {
   advance: (id, data) => api.put(`/candidates/${id}/advance`, data),
   rollback: (id, data) => api.put(`/candidates/${id}/rollback`, data),
   delete: (id) => api.delete(`/candidates/${id}`),
-  getAvailableProductLines: (id) => api.get(`/candidates/${id}/available-product-lines`),
+  getAvailableBusinessLines: (id) => api.get(`/candidates/${id}/available-business-lines`),
   canRecommend: (id) => api.get(`/candidates/${id}/can-recommend`),
   pushInterview: (id, data) => api.post(`/candidates/${id}/push-interview`, data)
 }
@@ -138,7 +122,7 @@ export const interviewApi = {
   // 新增的接口
   createRound: (data) => api.post('/interviews/rounds', data),
   updateRound: (id, data) => api.put(`/interviews/rounds/${id}`, data),
-  advance: (interviewId) => api.post(`/interviews/advance/${interviewId}`)
+  advance: (interviewId, data) => api.post(`/interviews/advance/${interviewId}`, data)
 }
 
 export const stageConfigApi = {

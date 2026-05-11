@@ -1,246 +1,209 @@
 -- ===========================================
--- 候选人招聘管理系统数据库 Schema
--- Database: recruit_db
--- 版本: 1.2
--- 日期: 2026-05-04
+-- 数据库 Schema
+-- 版本: 1.8
+-- 日期: 2026-05-11
 -- ===========================================
 
 -- ===========================================
 -- 用户表 User
 -- 系统用户（顾问、经理）
 -- ===========================================
-CREATE TABLE IF NOT EXISTS User (
+CREATE TABLE IF NOT EXISTS user (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username VARCHAR(50) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
     role VARCHAR(20) NOT NULL DEFAULT 'consultant' CHECK(role IN ('consultant', 'manager')),
-    realName VARCHAR(100),
+    real_name VARCHAR(100),
     email VARCHAR(100),
     phone VARCHAR(20),
-    managerId INTEGER,
-    isActive BOOLEAN DEFAULT TRUE,
-    lastLoginAt DATETIME,
+    manager_id INTEGER,
+    is_active BOOLEAN DEFAULT TRUE,
+    last_login_at DATETIME,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (managerId) REFERENCES User(id)
+    FOREIGN KEY (manager_id) REFERENCES user(id)
 );
 
 -- ===========================================
--- 产品线表 ProductLine
+-- 业务线表 BusinessLine
 -- ===========================================
-CREATE TABLE IF NOT EXISTS ProductLine (
+CREATE TABLE IF NOT EXISTS business_line (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name VARCHAR(100) NOT NULL UNIQUE,
-    clientOwner VARCHAR(100),
     description TEXT,
-    isActive BOOLEAN DEFAULT TRUE,
+    is_active BOOLEAN DEFAULT TRUE,
+    can_edit TEXT,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- ===========================================
--- 产品线-用户关联表 ProductLineUser
--- ===========================================
-CREATE TABLE IF NOT EXISTS ProductLineUser (
-    productLineId INTEGER NOT NULL,
-    userId INTEGER NOT NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (productLineId, userId),
-    FOREIGN KEY (productLineId) REFERENCES ProductLine(id),
-    FOREIGN KEY (userId) REFERENCES User(id)
-);
+-- 说明：已删除 clientOwner（客户负责人）字段
 
 -- ===========================================
 -- 候选人表 Candidate
 -- ===========================================
-CREATE TABLE IF NOT EXISTS Candidate (
+CREATE TABLE IF NOT EXISTS candidate (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name VARCHAR(100) NOT NULL,
     email VARCHAR(100),
     phone VARCHAR(20),
     gender VARCHAR(10),
-    idCard VARCHAR(20),
-    consultantId INTEGER,
-    lastOperatorId INTEGER,
-    currentStage VARCHAR(50) DEFAULT 'candidate_entry',
+    id_card VARCHAR(20),
+    last_operator_id INTEGER,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (consultantId) REFERENCES User(id),
-    FOREIGN KEY (lastOperatorId) REFERENCES User(id)
+    FOREIGN KEY (last_operator_id) REFERENCES user(id)
+);
+
+-- ===========================================
+-- 候选人阶段表 CandidateStage
+-- 统一管理候选人从录入到离职的全生命周期阶段
+-- ===========================================
+CREATE TABLE IF NOT EXISTS candidate_stage (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    candidate_id INTEGER NOT NULL UNIQUE,
+    consultant_id INTEGER,
+    current_stage VARCHAR(50) DEFAULT 'candidate_entry',
+    previous_stage VARCHAR(50),
+    stage_history TEXT DEFAULT '[]',
+    updated_by INTEGER,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (candidate_id) REFERENCES candidate(id),
+    FOREIGN KEY (consultant_id) REFERENCES user(id),
+    FOREIGN KEY (updated_by) REFERENCES user(id)
 );
 
 -- ===========================================
 -- 员工表 Employee
 -- ===========================================
-CREATE TABLE IF NOT EXISTS Employee (
+CREATE TABLE IF NOT EXISTS employee (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name VARCHAR(100) NOT NULL,
-    email VARCHAR(100),
-    phone VARCHAR(20),
-    gender VARCHAR(10),
-    idCard VARCHAR(20),
-    lastOperatorId INTEGER,
-    currentStage VARCHAR(50) DEFAULT 'pending_onboarding',
-    entryDate DATETIME,
-    entryRemark TEXT,
-    leaveDate DATETIME,
-    leaveType VARCHAR(20),
-    leaveRemark TEXT,
-    productLineId INTEGER,
-    candidateId INTEGER,
+    candidate_id INTEGER,
+    business_line_id INTEGER,
+    entry_date DATETIME,
+    entry_remark TEXT,
+    leave_date DATETIME,
+    leave_type VARCHAR(20),
+    leave_remark TEXT,
+    updated_by INTEGER,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (lastOperatorId) REFERENCES User(id),
-    FOREIGN KEY (productLineId) REFERENCES ProductLine(id),
-    FOREIGN KEY (candidateId) REFERENCES Candidate(id)
+    FOREIGN KEY (business_line_id) REFERENCES business_line(id),
+    FOREIGN KEY (candidate_id) REFERENCES candidate(id),
+    FOREIGN KEY (updated_by) REFERENCES user(id)
 );
 
--- ===========================================
--- 候选人-产品线关联表 CandidateProductLine
--- ===========================================
-CREATE TABLE IF NOT EXISTS CandidateProductLine (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    candidateId INTEGER NOT NULL,
-    productLineId INTEGER NOT NULL,
-    recommendDate DATETIME,
-    interviewStage VARCHAR(50) DEFAULT 'recommend_interview',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (candidateId) REFERENCES Candidate(id),
-    FOREIGN KEY (productLineId) REFERENCES ProductLine(id),
-    UNIQUE(candidateId, productLineId)
-);
+-- 说明：
+-- 1. 已删除冗余字段：name, email, phone, gender, id_card, last_operator_id, current_stage
+-- 2. 员工个人信息通过 candidate_id 关联从 candidate 表获取
+-- 3. 当前阶段统一从 candidate_stage 表获取
+-- 4. 新增 updated_by 字段记录操作人
 
 -- ===========================================
 -- 面试表 Interview
 -- ===========================================
-CREATE TABLE IF NOT EXISTS Interview (
+CREATE TABLE IF NOT EXISTS interview (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    candidateProductLineId INTEGER NOT NULL UNIQUE,
-    currentStage VARCHAR(50) NOT NULL DEFAULT 'recommend_interview',
-    finalStatus VARCHAR(20) NOT NULL DEFAULT 'pending',
+    candidate_id INTEGER NOT NULL UNIQUE,
+    business_line_id INTEGER,
+    current_status VARCHAR(20) NOT NULL DEFAULT 'progressing',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (candidateProductLineId) REFERENCES CandidateProductLine(id)
+    FOREIGN KEY (candidate_id) REFERENCES candidate(id),
+    FOREIGN KEY (business_line_id) REFERENCES business_line(id)
 );
 
+-- 说明：
+-- 1. 一个候选人只能有一条面试记录（UNIQUE约束）
+-- 2. 已删除 candidateProductLineId 字段，改为直接关联 businessLineId
+-- 3. 已删除 current_stage 字段，统一从 candidate_stage 表获取
+
 -- ===========================================
--- 面试轮次表 InterviewRound
+-- 面试轮次表 interview_round
 -- ===========================================
-CREATE TABLE IF NOT EXISTS InterviewRound (
+CREATE TABLE IF NOT EXISTS interview_round (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    interviewId INTEGER NOT NULL,
-    stageCode VARCHAR(50) NOT NULL,
-    stageIndex INTEGER NOT NULL,
-    scheduledDate DATETIME,
-    interviewer VARCHAR(100),
+    interview_id INTEGER NOT NULL,
+    stage_code VARCHAR(50) NOT NULL,
+    stage_index INTEGER NOT NULL,
+    scheduled_date DATETIME,
     content TEXT,
-    passed BOOLEAN,
-    completedAt DATETIME,
+    current_status VARCHAR(50),
+    feedback_date DATETIME,
+    completed_at DATETIME,
+    entry_date DATETIME,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (interviewId) REFERENCES Interview(id),
-    UNIQUE(interviewId, stageCode)
+    FOREIGN KEY (interview_id) REFERENCES interview(id),
+    UNIQUE(interview_id, stage_code)
 );
 
 -- ===========================================
 -- 机考试卷表 ExamPaper
 -- ===========================================
-CREATE TABLE IF NOT EXISTS ExamPaper (
+CREATE TABLE IF NOT EXISTS exam_paper (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name VARCHAR(100) NOT NULL UNIQUE,
     description TEXT,
-    totalScore INTEGER,
-    isActive BOOLEAN DEFAULT TRUE,
+    total_score INTEGER,
+    pass_line INTEGER NOT NULL DEFAULT 60,
+    exam_date DATETIME,
+    is_active BOOLEAN DEFAULT TRUE,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
--- ===========================================
--- 机考合格线表 ExamPassLine
--- ===========================================
-CREATE TABLE IF NOT EXISTS ExamPassLine (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    examPaperId INTEGER NOT NULL,
-    passLine INTEGER NOT NULL,
-    isCurrent BOOLEAN DEFAULT TRUE,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (examPaperId) REFERENCES ExamPaper(id)
 );
 
 -- ===========================================
 -- 机考表 Exam
 -- ===========================================
-CREATE TABLE IF NOT EXISTS Exam (
+CREATE TABLE IF NOT EXISTS exam (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    candidateId INTEGER NOT NULL UNIQUE,
-    examPaperId INTEGER,
-    isOnlineExam BOOLEAN DEFAULT TRUE,
-    examDate DATETIME,
-    examCompleteDate DATETIME,
-    examTotalScore INTEGER,
-    isCheating BOOLEAN DEFAULT FALSE,
-    examScore INTEGER,
-    examPassed BOOLEAN,
+    candidate_id INTEGER NOT NULL UNIQUE,
+    exam_paper_id INTEGER,
+    is_online_exam BOOLEAN DEFAULT TRUE,
+    exam_date DATETIME,
+    exam_total_score INTEGER,
+    is_cheating BOOLEAN DEFAULT FALSE,
+    exam_score INTEGER,
+    current_status TEXT DEFAULT 'pending',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (candidateId) REFERENCES Candidate(id),
-    FOREIGN KEY (examPaperId) REFERENCES ExamPaper(id)
+    FOREIGN KEY (candidate_id) REFERENCES candidate(id),
+    FOREIGN KEY (exam_paper_id) REFERENCES exam_paper(id)
 );
 
--- ===========================================
--- 机考阶段表 ExamStage
--- ===========================================
-CREATE TABLE IF NOT EXISTS ExamStage (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    candidateId INTEGER NOT NULL,
-    examPaperId INTEGER,
-    score FLOAT,
-    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'completed', 'passed', 'failed')),
-    examDate DATETIME,
-    feedback TEXT,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (candidateId) REFERENCES Candidate(id)
-);
+-- 说明：
+-- 1. examPassed 已重命名为 currentStatus（当前状态），值：pending(待录分)/passed(通过)/failed(未通过)
+-- 2. 已删除 exam_complete_date 字段
+
 
 -- ===========================================
--- 韧测类型表 TestType
+-- 韧测表 test
 -- ===========================================
-CREATE TABLE IF NOT EXISTS TestType (
+CREATE TABLE IF NOT EXISTS test (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name VARCHAR(100) NOT NULL UNIQUE,
-    description TEXT,
-    isActive BOOLEAN DEFAULT TRUE,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
--- ===========================================
--- 韧测表 Test
--- ===========================================
-CREATE TABLE IF NOT EXISTS Test (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    candidateId INTEGER NOT NULL UNIQUE,
-    testTypeId INTEGER,
-    testDate DATETIME,
-    testCompleteDate DATETIME,
-    worryValue INTEGER,
-    optimismValue INTEGER,
+    candidate_id INTEGER NOT NULL UNIQUE,
+    issue_date DATETIME,
+    worry_value INTEGER,
+    optimism_value INTEGER,
     consistency INTEGER,
-    testPassed BOOLEAN,
+    emotion_score INTEGER,
+    current_status TEXT DEFAULT 'pending',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (candidateId) REFERENCES Candidate(id),
-    FOREIGN KEY (testTypeId) REFERENCES TestType(id)
+    FOREIGN KEY (candidate_id) REFERENCES candidate(id)
 );
+
+-- 说明：
+-- 1. 已删除韧测类型字段(testTypeId)，韧测类型表已移除
+-- 2. currentStatus 字段值：pending(待录分)/abandoned(放弃)/passed(通过)/failed(未通过)
+-- 3. testDate 已重命名为 issueDate（下发日期）
 
 -- ===========================================
 -- 阶段配置表 StageConfig
 -- ===========================================
-CREATE TABLE IF NOT EXISTS StageConfig (
+CREATE TABLE IF NOT EXISTS stage_config (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     module VARCHAR(255) NOT NULL UNIQUE,
     stages TEXT NOT NULL DEFAULT '[]',
@@ -252,31 +215,27 @@ CREATE TABLE IF NOT EXISTS StageConfig (
 -- ===========================================
 -- 索引
 -- ===========================================
-CREATE INDEX IF NOT EXISTS idx_candidate_currentStage ON Candidate(currentStage);
-CREATE INDEX IF NOT EXISTS idx_candidate_lastOperator ON Candidate(lastOperatorId);
-CREATE INDEX IF NOT EXISTS idx_employee_currentStage ON Employee(currentStage);
-CREATE INDEX IF NOT EXISTS idx_employee_lastOperator ON Employee(lastOperatorId);
-CREATE INDEX IF NOT EXISTS idx_employee_productLine ON Employee(productLineId);
-CREATE INDEX IF NOT EXISTS idx_employee_candidate ON Employee(candidateId);
-CREATE INDEX IF NOT EXISTS idx_candidateProductLine_candidate ON CandidateProductLine(candidateId);
-CREATE INDEX IF NOT EXISTS idx_candidateProductLine_productLine ON CandidateProductLine(productLineId);
-CREATE INDEX IF NOT EXISTS idx_exam_candidate ON Exam(candidateId);
-CREATE INDEX IF NOT EXISTS idx_test_candidate ON Test(candidateId);
-CREATE INDEX IF NOT EXISTS idx_interview_candidateProductLine ON Interview(candidateProductLineId);
-CREATE INDEX IF NOT EXISTS idx_interview_currentStage ON Interview(currentStage);
-CREATE INDEX IF NOT EXISTS idx_interview_finalStatus ON Interview(finalStatus);
-CREATE INDEX IF NOT EXISTS idx_interviewRound_interview ON InterviewRound(interviewId);
-CREATE INDEX IF NOT EXISTS idx_interviewRound_stageCode ON InterviewRound(stageCode);
-CREATE INDEX IF NOT EXISTS idx_user_role ON User(role);
-CREATE INDEX IF NOT EXISTS idx_productLine_isActive ON ProductLine(isActive);
-CREATE INDEX IF NOT EXISTS idx_stageConfig_module ON StageConfig(module);
+CREATE INDEX IF NOT EXISTS idx_candidate_last_operator ON candidate(last_operator_id);
+CREATE INDEX IF NOT EXISTS idx_candidate_stage_candidate ON candidate_stage(candidate_id);
+CREATE INDEX IF NOT EXISTS idx_candidate_stage_current_stage ON candidate_stage(current_stage);
+CREATE INDEX IF NOT EXISTS idx_employee_business_line ON employee(business_line_id);
+CREATE INDEX IF NOT EXISTS idx_employee_candidate ON employee(candidate_id);
+CREATE INDEX IF NOT EXISTS idx_exam_candidate ON exam(candidate_id);
+CREATE INDEX IF NOT EXISTS idx_test_candidate ON test(candidate_id);
+CREATE INDEX IF NOT EXISTS idx_interview_business_line ON interview(business_line_id);
+CREATE INDEX IF NOT EXISTS idx_interview_current_status ON interview(current_status);
+CREATE INDEX IF NOT EXISTS idx_interview_round_interview ON interview_round(interview_id);
+CREATE INDEX IF NOT EXISTS idx_interview_round_stage_code ON interview_round(stage_code);
+CREATE INDEX IF NOT EXISTS idx_user_role ON user(role);
+CREATE INDEX IF NOT EXISTS idx_business_line_is_active ON business_line(is_active);
+CREATE INDEX IF NOT EXISTS idx_stage_config_module ON stage_config(module);
 
 -- ===========================================
 -- 初始化数据（默认配置）
 -- ===========================================
 
 -- 默认阶段配置
-INSERT OR IGNORE INTO StageConfig (module, stages, stage_names, created_at, updated_at) VALUES
+INSERT OR IGNORE INTO stage_config (module, stages, stage_names, created_at, updated_at) VALUES
     ('candidate_entry', '["candidate_entry", "exam_declare", "exam_complete", "test_declare", "test_complete", "recommend_interview", "qualification_interview", "tech_interview_1", "tech_interview_2", "manager_interview", "approval", "offer", "pending_onboarding", "entry", "leave"]', '{"candidate_entry":"候选录入","exam_declare":"机考申报","exam_complete":"机考完成","test_declare":"韧测申报","test_complete":"韧测完成","recommend_interview":"推荐面试","qualification_interview":"资面安排","tech_interview_1":"技术面试(一)","tech_interview_2":"技术面试(二)","manager_interview":"主管面试","approval":"租用审批","offer":"Offer","pending_onboarding":"待入职","entry":"入职","leave":"离职"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     ('exam_management', '["candidate_entry", "exam_declare", "exam_complete", "test_declare", "test_complete", "recommend_interview", "qualification_interview", "tech_interview_1", "tech_interview_2", "manager_interview", "approval", "offer", "pending_onboarding", "entry", "leave"]', '{"candidate_entry":"候选录入","exam_declare":"机考申报","exam_complete":"机考完成","test_declare":"韧测申报","test_complete":"韧测完成","recommend_interview":"推荐面试","qualification_interview":"资面安排","tech_interview_1":"技术面试(一)","tech_interview_2":"技术面试(二)","manager_interview":"主管面试","approval":"租用审批","offer":"Offer","pending_onboarding":"待入职","entry":"入职","leave":"离职"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     ('test_management', '["candidate_entry", "exam_declare", "exam_complete", "test_declare", "test_complete", "recommend_interview", "qualification_interview", "tech_interview_1", "tech_interview_2", "manager_interview", "approval", "offer", "pending_onboarding", "entry", "leave"]', '{"candidate_entry":"候选录入","exam_declare":"机考申报","exam_complete":"机考完成","test_declare":"韧测申报","test_complete":"韧测完成","recommend_interview":"推荐面试","qualification_interview":"资面安排","tech_interview_1":"技术面试(一)","tech_interview_2":"技术面试(二)","manager_interview":"主管面试","approval":"租用审批","offer":"Offer","pending_onboarding":"待入职","entry":"入职","leave":"离职"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
@@ -310,18 +269,21 @@ INSERT OR IGNORE INTO StageConfig (module, stages, stage_names, created_at, upda
 -- ===========================================
 -- 关系图
 -- ===========================================
--- User <---+---> (many-to-many) ProductLine
+-- User <---+---> (one-to-many) Candidate (last operator)
 --          |
---          +---> (one-to-many) Candidate (last operator)
+--          +---> (one-to-many) CandidateStage (updated by)
 --          |
---          +---> (one-to-many) Employee (last operator)
+--          +---> (one-to-many) Employee (updated by)
 --          |
 --          +---> (one-to-many) User (subordinates/manager)
 --
--- ProductLine <---+---> (many-to-many) Candidate
+-- BusinessLine <---+---> (one-to-many) Interview
 --                 |
+--                 +---> (one-to-many) Employee
 --
--- Candidate <---+---> (one-to-many) CandidateProductLine
+-- Candidate <---+---> (one-to-one) CandidateStage
+--               |
+--               +---> (one-to-one) Interview
 --               |
 --               +---> (one-to-one) Exam
 --               |
@@ -329,14 +291,7 @@ INSERT OR IGNORE INTO StageConfig (module, stages, stage_names, created_at, upda
 --               |
 --               +---> (one-to-one) Employee (when stage reaches pending_onboarding)
 --
--- CandidateProductLine <---+---> (one-to-one) Interview
---                        |
---
 -- Interview <---+---> (one-to-many) InterviewRound
 --
--- ExamPaper <---+---> (one-to-many) ExamPassLine
---               |
---               +---> (one-to-many) Exam
---
--- TestType <---+---> (one-to-many) Test
+-- ExamPaper <---+---> (one-to-many) Exam
 -- ===========================================

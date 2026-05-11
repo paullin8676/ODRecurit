@@ -146,21 +146,26 @@
 |--------|------|------|
 | id | INTEGER | 主键，自增 |
 | candidateId | INTEGER | 候选人ID |
-| productLineId | INTEGER | 产品线ID |
+| productLineId | INTEGER | 产品线ID（可空） |
 | interviewStage | STRING(50) | 面试阶段 |
 | recommendDate | DATE | 推荐日期 |
 | created_at | DATE | 创建时间 |
 | updated_at | DATE | 更新时间 |
 
+**说明**：productLineId 可空，移除了唯一性约束，一个候选人可以有多个产品线记录
+
 #### 3.1.4 Interview（面试记录表）
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
 | id | INTEGER | 主键，自增 |
-| candidateProductLineId | INTEGER | 候选人产品线关联ID |
+| candidateId | INTEGER | 候选人ID（NOT NULL，UNIQUE） |
+| candidateProductLineId | INTEGER | 候选人产品线关联ID（可空，兼容旧数据） |
 | currentStage | STRING(50) | 当前面试阶段 |
 | finalStatus | STRING(20) | 最终状态（pending/passed/failed） |
 | created_at | DATE | 创建时间 |
 | updated_at | DATE | 更新时间 |
+
+**说明**：一个候选人只能有一条面试记录（UNIQUE约束）
 
 #### 3.1.5 InterviewRound（面试轮次表）
 | 字段名 | 类型 | 说明 |
@@ -198,15 +203,17 @@
 |--------|------|------|
 | id | INTEGER | 主键，自增 |
 | candidateId | INTEGER | 候选人ID |
-| testTypeId | INTEGER | 韧测类型ID |
-| testDate | DATE | 韧测日期 |
-| testCompleteDate | DATE | 韧测完成日期 |
+| issueDate | DATE | 下发日期 |
 | worryValue | INTEGER | 忧虑值 |
 | optimismValue | INTEGER | 乐观值 |
 | consistency | INTEGER | 一致性 |
-| testPassed | BOOLEAN | 韧测是否通过 |
+| emotionScore | INTEGER | 情绪分 |
+| currentStatus | STRING(20) | 当前状态（pending-待录分/abandoned-放弃/passed-通过/failed-未通过） |
+| testPassed | BOOLEAN | 韧测是否通过（兼容旧数据） |
 | created_at | DATE | 创建时间 |
 | updated_at | DATE | 更新时间 |
+
+**说明**：已删除韧测类型字段(testTypeId)，韧测类型配置表已移除；currentStatus 默认值为 pending（待录分）
 
 #### 3.1.8 ExamPaper（机考试卷表）
 | 字段名 | 类型 | 说明 |
@@ -219,40 +226,7 @@
 | created_at | DATE | 创建时间 |
 | updated_at | DATE | 更新时间 |
 
-#### 3.1.9 ExamPassLine（机考合格线表）
-| 字段名 | 类型 | 说明 |
-|--------|------|------|
-| id | INTEGER | 主键，自增 |
-| examPaperId | INTEGER | 试卷ID |
-| passLine | INTEGER | 合格线 |
-| isCurrent | BOOLEAN | 是否当前版本 |
-| created_at | DATE | 创建时间 |
-| updated_at | DATE | 更新时间 |
-
-#### 3.1.10 ExamStage（机考阶段表）
-| 字段名 | 类型 | 说明 |
-|--------|------|------|
-| id | INTEGER | 主键，自增 |
-| candidateId | INTEGER | 候选人ID |
-| examPaperId | INTEGER | 试卷ID |
-| score | FLOAT | 分数 |
-| status | STRING(20) | 状态 |
-| examDate | DATE | 机考日期 |
-| feedback | TEXT | 反馈 |
-| created_at | DATE | 创建时间 |
-| updated_at | DATE | 更新时间 |
-
-#### 3.1.11 TestType（韧测类型表）
-| 字段名 | 类型 | 说明 |
-|--------|------|------|
-| id | INTEGER | 主键，自增 |
-| name | STRING(100) | 类型名称 |
-| description | TEXT | 描述 |
-| isActive | BOOLEAN | 是否激活 |
-| created_at | DATE | 创建时间 |
-| updated_at | DATE | 更新时间 |
-
-#### 3.1.12 StageConfig（阶段配置表）
+#### 3.1.9 StageConfig（阶段配置表）
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
 | id | INTEGER | 主键，自增 |
@@ -278,25 +252,22 @@
 | created_at | DATE | 创建时间 |
 | updated_at | DATE | 更新时间 |
 
-#### 3.1.14 ProductLine（产品线表）
+#### 3.1.14 BusinessLine（业务线表）
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
 | id | INTEGER | 主键，自增 |
-| name | STRING(100) | 产品线名称 |
-| clientOwner | STRING(100) | 客户负责人 |
+| name | STRING(100) | 业务线名称 |
 | description | TEXT | 描述 |
 | isActive | BOOLEAN | 是否激活 |
+| canEdit | TEXT(JSON) | 可编辑用户ID列表 |
 | created_at | DATE | 创建时间 |
 | updated_at | DATE | 更新时间 |
 
-#### 3.1.15 ProductLineUser（产品线用户关联表）
-| 字段名 | 类型 | 说明 |
-|--------|------|------|
-| productLineId | INTEGER | 产品线ID |
-| userId | INTEGER | 用户ID |
-| created_at | DATE | 创建时间 |
-| updated_at | DATE | 更新时间 |
-| (productLineId, userId) | | 联合主键 |
+**说明**：原 ProductLine 表已改名为 BusinessLine，新增 canEdit 字段用于控制哪些用户可以在面试阶段编辑业务线
+
+#### 3.1.15 已删除表
+- **ProductLineUser**：产品线用户关联表已删除
+- **CandidateProductLine**：候选人产品线关联表已删除
 
 ### 3.2 数据关联关系
 
@@ -304,25 +275,18 @@
 User 1:N Candidate (lastOperator)
 User 1:N Employee (lastOperator)
 User 1:N User (subordinates/manager)
-User N:M ProductLine (via ProductLineUser)
 
 Candidate 1:1 Exam
 Candidate 1:1 Test
-Candidate 1:N CandidateProductLine
 Candidate 1:1 Employee (when stage reaches pending_onboarding)
-
-CandidateProductLine 1:1 Interview
-CandidateProductLine N:1 ProductLine
+Candidate 1:1 Interview (一个候选人只能有一条面试记录)
 
 Interview 1:N InterviewRound
+Interview N:1 BusinessLine (productLineId)
 
-ProductLine 1:N CandidateProductLine
-ProductLine 1:N Employee
+BusinessLine 1:N Employee
 
-ExamPaper 1:N ExamPassLine
 ExamPaper 1:N Exam
-
-TestType 1:N Test
 ```
 
 ---
@@ -429,8 +393,9 @@ TestType 1:N Test
 |------|------|------|
 | `/api/exam-papers` | GET/POST/PUT/DELETE | 试卷管理 |
 | `/api/exam-pass-lines` | GET/POST/PUT/DELETE | 合格线管理 |
-| `/api/test-types` | GET/POST/PUT/DELETE | 韧测类型管理 |
 | `/api/statistics` | GET | 统计数据 |
+
+**说明**：已删除韧测类型管理接口(`/api/test-types`)
 
 ---
 
@@ -549,9 +514,10 @@ TestType 1:N Test
 | 用户管理 | `/users` | 用户列表和管理 |
 | 产品线管理 | `/product-lines` | 产品线配置 |
 | 机考题库 | `/exam-papers` | 试卷管理 |
-| 韧测类型 | `/test-types` | 韧测类型配置 |
 | 阶段配置 | `/stage-config` | 阶段配置管理 |
 | 统计报表 | `/statistics` | 数据统计 |
+
+**说明**：已删除韧测类型配置页面(`/test-types`)
 
 ### 6.2 页面功能
 
@@ -683,6 +649,9 @@ node src/app.js
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| 1.13 | 2026-05-11 | 更新内容：<br>1. 修复统计报表模块报错问题：`by-consultant` 和 `summary` 接口将 `consultantId` 字段从 `Candidate` 表改为从 `CandidateStage` 表查询<br>2. 更新project_prd.md、database_schema.sql、recruit_rule.md文档 |
+| 1.12 | 2026-05-09 | 更新内容：<br>1. 员工管理所有阶段变化都会同步到面试表<br>2. 员工和面试关联统一使用 candidateId<br>3. 面试管理列表新增入职日期和离职日期列，从 Employee 表获取<br>4. 修复编辑 Offer 阶段时显示接受状态和入职日期<br>5. 修复员工管理编辑保存时入职日期丢失问题<br>6. 更新project_prd.md、database_schema.sql、recruit_rule.md文档 |
+| 1.11 | 2026-05-07 | 更新内容：<br>1. Interview表新增candidateId字段（NOT NULL + UNIQUE），实现"一个候选人只能有一次面试机会"<br>2. CandidateProductLine表productLineId改为可空，移除唯一性约束<br>3. 删除韧测类型表(TestType)及相关代码<br>4. 删除ProductLine表的clientOwner字段<br>5. 更新project_prd.md、database_schema.sql、recruit_rule.md文档 |
 | 1.10 | 2026-05-05 | 更新内容：<br>1. 面试管理模块新增候选人通过/不通过筛选功能<br>2. 前端添加passStatus筛选下拉框（全部、通过、不通过）<br>3. 后端GET /api/interviews接口支持passStatus参数<br>4. 筛选规则：不通过=任一面试轮次passed=false，通过=所有面试轮次都未标记为不通过<br>5. 更新project_prd.md和recruit_rule.md文档 |
 | 1.9 | 2026-05-05 | 更新内容：<br>1. 优化面试管理模块：与其他模块保持一致的列表获取逻辑和API优化<br>2. interviewApi.getAll增加stages数组参数处理<br>3. 面试管理前端支持传递availableStages给后端<br>4. 面试管理后端支持stages参数，优先使用前端传来的阶段配置<br>5. 面试管理后端使用findAndCountAll数据库分页<br>6. 修复面试管理数据加载时序：确保availableStages在fetchEmployees前加载完成 |
 | 1.8 | 2026-05-05 | 更新内容：<br>1. 优化员工管理模块：与其他模块保持一致的列表获取逻辑和API优化<br>2. employeeApi.getAll增加stages数组参数处理<br>3. 员工管理前端支持传递availableStages给后端<br>4. 员工管理后端支持stages参数，优先使用前端传来的阶段配置<br>5. 修复员工管理数据加载时序：确保availableStages在fetchEmployees前加载完成 |

@@ -1,15 +1,15 @@
 const express = require('express');
-const { Employee, ProductLine, User, StageConfig, Candidate, CandidateProductLine, Interview } = require('../models');
+const { Employee, BusinessLine, User, StageConfig, Candidate } = require('../models');
 const { authenticate } = require('../middleware/auth');
+const StageService = require('../services/stageService');
 
 const router = express.Router();
 
 router.get('/', authenticate, async (req, res, next) => {
   try {
-    const { page = 1, pageSize = 20, name, currentStage, stages } = req.query;
+    const { page = 1, pageSize = 20, name, stages } = req.query;
 
     let employeeStages = ['pending_onboarding', 'entry', 'leave'];
-    // 优先使用前端传来的 stages 参数
     if (stages) {
       if (Array.isArray(stages)) {
         employeeStages = stages;
@@ -17,7 +17,6 @@ router.get('/', authenticate, async (req, res, next) => {
         employeeStages = stages.split(',').map(s => s.trim()).filter(s => s);
       }
     } else {
-      // 如果没有 stages 参数，才去查询数据库
       try {
         const stageConfig = await StageConfig.findOne({ where: { module: 'employee_management' } });
         if (stageConfig && stageConfig.config && stageConfig.config.stages && Array.isArray(stageConfig.config.stages)) {
@@ -27,18 +26,16 @@ router.get('/', authenticate, async (req, res, next) => {
       }
     }
 
-    const where = {
-      currentStage: {
-        [require('sequelize').Op.in]: employeeStages
-      }
-    };
+    const { Op } = require('sequelize');
+    const where = {};
 
     if (name) {
-      where.name = { [require('sequelize').Op.like]: `%${name}%` };
-    }
-
-    if (currentStage) {
-      where.currentStage = currentStage;
+      const candidates = await Candidate.findAll({
+        where: { name: { [Op.like]: `%${name}%` } },
+        attributes: ['id']
+      });
+      const candidateIds = candidates.map(c => c.id);
+      where.candidateId = { [Op.in]: candidateIds.length > 0 ? candidateIds : [0] };
     }
 
     const limit = parseInt(pageSize);
@@ -48,14 +45,13 @@ router.get('/', authenticate, async (req, res, next) => {
       where,
       include: [
         {
-          model: ProductLine,
-          as: 'productLine',
-          attributes: ['id', 'name', 'clientOwner']
+          model: BusinessLine,
+          as: 'businessLine',
+          attributes: ['id', 'name']
         },
         {
-          model: User,
-          as: 'lastOperator',
-          attributes: ['id', 'username', 'realName']
+          model: Candidate,
+          attributes: ['id', 'name', 'email', 'phone', 'gender', 'idCard']
         }
       ],
       order: [['createdAt', 'DESC']],
@@ -63,8 +59,33 @@ router.get('/', authenticate, async (req, res, next) => {
       offset
     });
 
+    const employeesWithCandidate = await Promise.all(rows.map(async (employee) => {
+      const candidate = employee.Candidate;
+      const candidateStage = candidate ? await StageService.getStage(candidate.id) : null;
+      
+      return {
+        id: employee.id,
+        candidateId: employee.candidateId,
+        businessLineId: employee.businessLineId,
+        businessLine: employee.businessLine,
+        name: candidate ? candidate.name : null,
+        email: candidate ? candidate.email : null,
+        phone: candidate ? candidate.phone : null,
+        gender: candidate ? candidate.gender : null,
+        idCard: candidate ? candidate.idCard : null,
+        currentStage: candidateStage ? candidateStage.currentStage : null,
+        entryDate: employee.entryDate,
+        entryRemark: employee.entryRemark,
+        leaveDate: employee.leaveDate,
+        leaveType: employee.leaveType,
+        leaveRemark: employee.leaveRemark,
+        createdAt: employee.createdAt,
+        updatedAt: employee.updatedAt
+      };
+    }));
+
     res.json({
-      employees: rows,
+      employees: employeesWithCandidate,
       pagination: {
         page: parseInt(page),
         pageSize: parseInt(pageSize),
@@ -81,14 +102,13 @@ router.get('/:id', authenticate, async (req, res, next) => {
     const employee = await Employee.findByPk(req.params.id, {
       include: [
         {
-          model: ProductLine,
-          as: 'productLine',
-          attributes: ['id', 'name', 'clientOwner']
+          model: BusinessLine,
+          as: 'businessLine',
+          attributes: ['id', 'name']
         },
         {
-          model: User,
-          as: 'lastOperator',
-          attributes: ['id', 'username', 'realName']
+          model: Candidate,
+          attributes: ['id', 'name', 'email', 'phone', 'gender', 'idCard']
         }
       ]
     });
@@ -97,7 +117,30 @@ router.get('/:id', authenticate, async (req, res, next) => {
       return res.status(404).json({ error: 'Employee not found' });
     }
 
-    res.json({ employee });
+    const candidate = employee.Candidate;
+    const candidateStage = candidate ? await StageService.getStage(candidate.id) : null;
+
+    const result = {
+      id: employee.id,
+      candidateId: employee.candidateId,
+      businessLineId: employee.businessLineId,
+      businessLine: employee.businessLine,
+      name: candidate ? candidate.name : null,
+      email: candidate ? candidate.email : null,
+      phone: candidate ? candidate.phone : null,
+      gender: candidate ? candidate.gender : null,
+      idCard: candidate ? candidate.idCard : null,
+      currentStage: candidateStage ? candidateStage.currentStage : null,
+      entryDate: employee.entryDate,
+      entryRemark: employee.entryRemark,
+      leaveDate: employee.leaveDate,
+      leaveType: employee.leaveType,
+      leaveRemark: employee.leaveRemark,
+      createdAt: employee.createdAt,
+      updatedAt: employee.updatedAt
+    };
+
+    res.json({ employee: result });
   } catch (error) {
     next(error);
   }
@@ -111,58 +154,78 @@ router.put('/:id', authenticate, async (req, res, next) => {
       return res.status(404).json({ error: 'Employee not found' });
     }
 
-    const { entryDate, entryRemark, leaveDate, leaveType, leaveRemark, ...basicInfo } = req.body;
+    const { entryDate, entryRemark, leaveDate, leaveType, leaveRemark, currentStage } = req.body;
 
     const updateData = {
-      lastOperatorId: req.user.id
+      updatedBy: req.user.id
     };
 
-    if (basicInfo.name) updateData.name = basicInfo.name;
-    if (basicInfo.email) updateData.email = basicInfo.email;
-    if (basicInfo.phone) updateData.phone = basicInfo.phone;
-    if (basicInfo.gender) updateData.gender = basicInfo.gender;
-    if (basicInfo.idCard) updateData.idCard = basicInfo.idCard;
-    if (basicInfo.currentStage) updateData.currentStage = basicInfo.currentStage;
+    if (entryDate !== undefined && entryDate !== null) updateData.entryDate = entryDate;
+    if (entryRemark !== undefined && entryRemark !== null) updateData.entryRemark = entryRemark;
+    if (leaveDate !== undefined && leaveDate !== null) updateData.leaveDate = leaveDate;
+    if (leaveType !== undefined && leaveType !== null) updateData.leaveType = leaveType;
+    if (leaveRemark !== undefined && leaveRemark !== null) updateData.leaveRemark = leaveRemark;
 
-    if (entryDate !== undefined) updateData.entryDate = entryDate;
-    if (entryRemark !== undefined) updateData.entryRemark = entryRemark;
-    if (leaveDate !== undefined) updateData.leaveDate = leaveDate;
-    if (leaveType !== undefined) updateData.leaveType = leaveType;
-    if (leaveRemark !== undefined) updateData.leaveRemark = leaveRemark;
-
-    if (!updateData.currentStage) {
-      if (leaveDate && !employee.leaveDate) {
-        updateData.currentStage = 'leave';
-      } else if (!leaveDate && employee.leaveDate) {
-        updateData.currentStage = 'entry';
-      }
-    }
-
-    const previousStage = employee.currentStage;
-    await employee.update(updateData);
-
-    if (previousStage !== updateData.currentStage && (updateData.currentStage === 'entry' || updateData.currentStage === 'leave')) {
+    if (currentStage) {
       if (employee.candidateId) {
-        await Candidate.update(
-          { currentStage: updateData.currentStage },
-          { where: { id: employee.candidateId } }
-        );
+        await StageService.updateStage(employee.candidateId, currentStage, req.user.id);
+      }
+    } else {
+      if (leaveDate && !employee.leaveDate) {
+        const targetStage = 'leave';
+        if (employee.candidateId) {
+          await StageService.updateStage(employee.candidateId, targetStage, req.user.id);
+        }
+      } else if (!leaveDate && employee.leaveDate) {
+        const targetStage = 'entry';
+        if (employee.candidateId) {
+          await StageService.updateStage(employee.candidateId, targetStage, req.user.id);
+        }
       }
     }
+
+    await employee.update(updateData);
 
     await employee.reload({
       include: [
         {
-          model: ProductLine,
-          as: 'productLine',
-          attributes: ['id', 'name', 'clientOwner']
+          model: BusinessLine,
+          as: 'businessLine',
+          attributes: ['id', 'name']
+        },
+        {
+          model: Candidate,
+          attributes: ['id', 'name', 'email', 'phone', 'gender', 'idCard']
         }
       ]
     });
 
+    const candidate = employee.Candidate;
+    const candidateStage = candidate ? await StageService.getStage(candidate.id) : null;
+
+    const result = {
+      id: employee.id,
+      candidateId: employee.candidateId,
+      businessLineId: employee.businessLineId,
+      businessLine: employee.businessLine,
+      name: candidate ? candidate.name : null,
+      email: candidate ? candidate.email : null,
+      phone: candidate ? candidate.phone : null,
+      gender: candidate ? candidate.gender : null,
+      idCard: candidate ? candidate.idCard : null,
+      currentStage: candidateStage ? candidateStage.currentStage : null,
+      entryDate: employee.entryDate,
+      entryRemark: employee.entryRemark,
+      leaveDate: employee.leaveDate,
+      leaveType: employee.leaveType,
+      leaveRemark: employee.leaveRemark,
+      createdAt: employee.createdAt,
+      updatedAt: employee.updatedAt
+    };
+
     res.json({
       message: 'Employee updated successfully',
-      employee
+      employee: result
     });
   } catch (error) {
     next(error);
@@ -178,16 +241,23 @@ router.put('/:id/advance', authenticate, async (req, res, next) => {
       return res.status(404).json({ error: 'Employee not found' });
     }
 
+    const candidateStage = employee.candidateId ? await StageService.getStage(employee.candidateId) : null;
+    const currentStage = candidateStage ? candidateStage.currentStage : 'pending_onboarding';
+    
     const STAGES = ['pending_onboarding', 'entry', 'leave'];
-    const currentIndex = STAGES.indexOf(employee.currentStage || 'pending_onboarding');
+    const currentIndex = STAGES.indexOf(currentStage);
     if (currentIndex === -1 || currentIndex >= STAGES.length - 1) {
       return res.status(400).json({ error: 'Employee already at final stage' });
     }
 
     const nextStage = STAGES[currentIndex + 1];
+
+    if (employee.candidateId) {
+      await StageService.updateStage(employee.candidateId, nextStage, req.user.id);
+    }
+
     const updateData = {
-      currentStage: nextStage,
-      lastOperatorId: req.user.id
+      updatedBy: req.user.id
     };
 
     if (nextStage === 'entry') {
@@ -213,16 +283,23 @@ router.put('/:id/rollback', authenticate, async (req, res, next) => {
       return res.status(404).json({ error: 'Employee not found' });
     }
 
+    const candidateStage = employee.candidateId ? await StageService.getStage(employee.candidateId) : null;
+    const currentStage = candidateStage ? candidateStage.currentStage : 'pending_onboarding';
+    
     const STAGES = ['pending_onboarding', 'entry', 'leave'];
-    const currentIndex = STAGES.indexOf(employee.currentStage || 'pending_onboarding');
+    const currentIndex = STAGES.indexOf(currentStage);
     if (currentIndex <= 0) {
       return res.status(400).json({ error: 'Employee already at first stage' });
     }
 
     const prevStage = STAGES[currentIndex - 1];
+
+    if (employee.candidateId) {
+      await StageService.updateStage(employee.candidateId, prevStage, req.user.id);
+    }
+
     await employee.update({
-      currentStage: prevStage,
-      lastOperatorId: req.user.id
+      updatedBy: req.user.id
     });
 
     res.json({

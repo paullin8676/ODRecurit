@@ -11,24 +11,12 @@ const Test = sequelize.define('Test', {
     type: DataTypes.INTEGER,
     allowNull: false,
     references: {
-      model: 'Candidate',
+      model: 'candidate',
       key: 'id'
     },
     unique: true // 一个候选人只能有一条韧测记录
   },
-  testTypeId: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    references: {
-      model: 'TestType',
-      key: 'id'
-    }
-  },
-  testDate: {
-    type: DataTypes.DATE,
-    allowNull: true
-  },
-  testCompleteDate: {
+  issueDate: {
     type: DataTypes.DATE,
     allowNull: true
   },
@@ -44,12 +32,20 @@ const Test = sequelize.define('Test', {
     type: DataTypes.INTEGER,
     allowNull: true
   },
-  testPassed: {
-    type: DataTypes.BOOLEAN,
+  emotionScore: {
+    type: DataTypes.INTEGER,
     allowNull: true
+  },
+  currentStatus: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: 'pending',
+    validate: {
+      isIn: [['pending', 'abandoned', 'passed', 'failed']]
+    }
   }
 }, {
-  tableName: 'Test',
+  tableName: 'test',
   timestamps: true,
   underscored: true
 });

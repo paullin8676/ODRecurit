@@ -37,7 +37,7 @@ const User = sequelize.define('User', {
     type: DataTypes.INTEGER,
     allowNull: true,
     references: {
-      model: 'User',
+      model: 'user',
       key: 'id'
     }
   },
@@ -50,7 +50,7 @@ const User = sequelize.define('User', {
     allowNull: true
   }
 }, {
-  tableName: 'User',
+  tableName: 'user',
   timestamps: true,
   underscored: true
 });

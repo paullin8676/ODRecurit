@@ -55,25 +55,16 @@ const routes = [
         component: () => import('../views/UserManagement.vue')
       },
       {
-        path: 'settings/product-lines',
-        name: 'ProductLineManagement',
-        component: () => import('../views/ProductLineManagement.vue')
+        path: 'settings/business-lines',
+        name: 'BusinessLineManagement',
+        component: () => import('../views/BusinessLineManagement.vue')
       },
       {
         path: 'settings/exam-papers',
         name: 'ExamPaperManagement',
         component: () => import('../views/ExamPaperManagement.vue')
       },
-      {
-        path: 'settings/test-types',
-        name: 'TestTypeManagement',
-        component: () => import('../views/TestTypeManagement.vue')
-      },
-      {
-        path: 'settings/exam-pass-lines',
-        name: 'ExamPassLineManagement',
-        component: () => import('../views/ExamPassLineManagement.vue')
-      },
+
       {
         path: 'stage-config',
         name: 'StageConfig',

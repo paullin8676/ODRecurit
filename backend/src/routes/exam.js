@@ -1,7 +1,8 @@
 const express = require('express');
 const { Op } = require('sequelize');
-const { Exam, Candidate, ExamPaper, CandidateProductLine } = require('../models');
+const { Exam, Candidate, ExamPaper, CandidateStage } = require('../models');
 const { authenticate } = require('../middleware/auth');
+const StageService = require('../services/stageService');
 
 const router = express.Router();
 
@@ -18,12 +19,15 @@ router.get('/', authenticate, async (req, res, next) => {
     if (name) {
       where.name = { [Op.like]: `%${name}%` };
     }
-    
-    if (currentStage) {
-      where.currentStage = currentStage;
-    } else if (stages) {
-      const stagesArray = Array.isArray(stages) ? stages : stages.split(',');
-      where.currentStage = { [Op.in]: stagesArray };
+
+    // 构建阶段过滤条件
+    const stageWhere = {};
+    if (currentStage && currentStage !== '') {
+      stageWhere.currentStage = currentStage;
+    }
+    if (stages && stages !== '') {
+      const stageArray = Array.isArray(stages) ? stages : stages.split(',');
+      stageWhere.currentStage = { [Op.in]: stageArray };
     }
 
     // 使用 findAndCountAll 进行数据库分页
@@ -32,7 +36,13 @@ router.get('/', authenticate, async (req, res, next) => {
       order: [['createdAt', 'DESC']],
       limit: size,
       offset: (pageNum - 1) * size,
-      include: []
+      include: Object.keys(stageWhere).length > 0 ? [
+        {
+          model: CandidateStage,
+          where: stageWhere,
+          required: true
+        }
+      ] : []
     });
 
     const candidateIds = rows.map(c => c.id);
@@ -54,8 +64,9 @@ router.get('/', authenticate, async (req, res, next) => {
       examMap[exam.candidateId] = exam;
     });
 
-    const resultCandidates = rows.map(candidate => {
+    const resultCandidates = await Promise.all(rows.map(async candidate => {
       const exam = examMap[candidate.id];
+      const candidateStage = await StageService.getStage(candidate.id);
       return {
         id: candidate.id,
         name: candidate.name,
@@ -63,7 +74,7 @@ router.get('/', authenticate, async (req, res, next) => {
         phone: candidate.phone,
         email: candidate.email,
         idCard: candidate.idCard,
-        currentStage: candidate.currentStage,
+        currentStage: candidateStage ? candidateStage.currentStage : 'candidate_entry',
         exam: exam && exam.id ? {
           id: exam.id,
           candidateId: exam.candidateId,
@@ -72,13 +83,14 @@ router.get('/', authenticate, async (req, res, next) => {
           isOnlineExam: exam.isOnlineExam,
           examDate: exam.examDate,
           examCompleteDate: exam.examCompleteDate,
-          examTotalScore: exam.examTotalScore,
+          examTotalScore: exam.examTotalScore || (exam.ExamPaper && exam.ExamPaper.totalScore) || 0,
+          passLine: exam.passLine || (exam.ExamPaper && exam.ExamPaper.passLine) || 0,
           isCheating: exam.isCheating,
           examScore: exam.examScore,
-          examPassed: exam.examPassed
+          currentStatus: exam.currentStatus || 'pending'
         } : null
       };
-    });
+    }));
 
     res.json({
       exams: resultCandidates,
@@ -101,7 +113,18 @@ router.get('/candidate/:id', authenticate, async (req, res, next) => {
         { model: ExamPaper, as: 'ExamPaper' }
       ]
     });
-    res.json({ exam });
+    
+    if (exam) {
+      res.json({ 
+        exam: {
+          ...exam.toJSON(),
+          currentStatus: exam.currentStatus || 'pending',
+          ExamPaper: exam.ExamPaper
+        } 
+      });
+    } else {
+      res.json({ exam: null });
+    }
   } catch (error) {
     next(error);
   }
@@ -109,14 +132,23 @@ router.get('/candidate/:id', authenticate, async (req, res, next) => {
 
 router.post('/', authenticate, async (req, res, next) => {
   try {
-    const { candidateId, ...examData } = req.body;
+    const { candidateId, currentStatus, ...examData } = req.body;
 
     let exam = await Exam.findOne({ where: { candidateId } });
 
     if (exam) {
-      exam = await exam.update(examData);
+      exam = await exam.update({ currentStatus, ...examData });
     } else {
-      exam = await Exam.create({ candidateId, ...examData });
+      exam = await Exam.create({ candidateId, currentStatus, ...examData });
+    }
+
+    if (currentStatus === 'passed') {
+      await StageService.updateStage(candidateId, 'exam_complete', req.user?.id);
+    } else if (currentStatus === 'failed') {
+      const stage = await StageService.getStage(candidateId);
+      if (stage && stage.currentStage === 'exam_declare') {
+        await StageService.updateStage(candidateId, 'exam_complete', req.user?.id);
+      }
     }
 
     exam = await Exam.findByPk(exam.id, {

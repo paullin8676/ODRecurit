@@ -40,7 +40,7 @@ router.get('/:id', authenticate, async (req, res, next) => {
 
 router.post('/', authenticate, authorize('manager'), async (req, res, next) => {
   try {
-    const { name, description, totalScore } = req.body;
+    const { name, description, totalScore, passLine, examDate } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: 'Name is required' });
@@ -49,7 +49,9 @@ router.post('/', authenticate, authorize('manager'), async (req, res, next) => {
     const examPaper = await ExamPaper.create({
       name,
       description,
-      totalScore
+      totalScore,
+      passLine,
+      examDate
     });
 
     res.status(201).json({
@@ -72,11 +74,13 @@ router.put('/:id', authenticate, authorize('manager'), async (req, res, next) =>
       return res.status(404).json({ error: 'Exam paper not found' });
     }
 
-    const { name, description, totalScore, isActive } = req.body;
+    const { name, description, totalScore, passLine, examDate, isActive } = req.body;
     await examPaper.update({
       name: name || examPaper.name,
       description: description !== undefined ? description : examPaper.description,
       totalScore: totalScore !== undefined ? totalScore : examPaper.totalScore,
+      passLine: passLine !== undefined ? passLine : examPaper.passLine,
+      examDate: examDate !== undefined ? examDate : examPaper.examDate,
       isActive: isActive !== undefined ? isActive : examPaper.isActive
     });
 

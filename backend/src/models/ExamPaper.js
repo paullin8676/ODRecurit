@@ -20,12 +20,21 @@ const ExamPaper = sequelize.define('ExamPaper', {
     type: DataTypes.INTEGER,
     allowNull: true
   },
+  passLine: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 60
+  },
+  examDate: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
   isActive: {
     type: DataTypes.BOOLEAN,
     defaultValue: true
   }
 }, {
-  tableName: 'ExamPaper',
+  tableName: 'exam_paper',
   timestamps: true,
   underscored: true
 });

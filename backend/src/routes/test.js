@@ -1,7 +1,8 @@
 const express = require('express');
 const { Op } = require('sequelize');
-const { Test, Candidate, TestType, CandidateProductLine, ProductLine, Interview } = require('../models');
+const { Test, Candidate, CandidateStage } = require('../models');
 const { authenticate } = require('../middleware/auth');
+const StageService = require('../services/stageService');
 
 const router = express.Router();
 
@@ -18,12 +19,15 @@ router.get('/', authenticate, async (req, res, next) => {
     if (name) {
       where.name = { [Op.like]: `%${name}%` };
     }
-    
-    if (currentStage) {
-      where.currentStage = currentStage;
-    } else if (stages) {
-      const stagesArray = Array.isArray(stages) ? stages : stages.split(',');
-      where.currentStage = { [Op.in]: stagesArray };
+
+    // 构建阶段过滤条件
+    const stageWhere = {};
+    if (currentStage && currentStage !== '') {
+      stageWhere.currentStage = currentStage;
+    }
+    if (stages && stages !== '') {
+      const stageArray = Array.isArray(stages) ? stages : stages.split(',');
+      stageWhere.currentStage = { [Op.in]: stageArray };
     }
 
     // 使用 findAndCountAll 进行数据库分页
@@ -32,7 +36,13 @@ router.get('/', authenticate, async (req, res, next) => {
       order: [['createdAt', 'DESC']],
       limit: size,
       offset: (pageNum - 1) * size,
-      include: []
+      include: Object.keys(stageWhere).length > 0 ? [
+        {
+          model: CandidateStage,
+          where: stageWhere,
+          required: true
+        }
+      ] : []
     });
 
     const candidateIds = rows.map(c => c.id);
@@ -43,10 +53,7 @@ router.get('/', authenticate, async (req, res, next) => {
         candidateId: {
           [Op.in]: candidateIds.length > 0 ? candidateIds : [0]
         }
-      },
-      include: [
-        { model: TestType, as: 'TestType' }
-      ]
+      }
     });
 
     const testMap = {};
@@ -54,8 +61,9 @@ router.get('/', authenticate, async (req, res, next) => {
       testMap[test.candidateId] = test;
     });
 
-    const resultCandidates = rows.map(candidate => {
+    const resultCandidates = await Promise.all(rows.map(async candidate => {
       const test = testMap[candidate.id];
+      const candidateStage = await StageService.getStage(candidate.id);
       return {
         id: candidate.id,
         name: candidate.name,
@@ -63,21 +71,19 @@ router.get('/', authenticate, async (req, res, next) => {
         phone: candidate.phone,
         email: candidate.email,
         idCard: candidate.idCard,
-        currentStage: candidate.currentStage,
+        currentStage: candidateStage ? candidateStage.currentStage : 'candidate_entry',
         test: test && test.id ? {
           id: test.id,
           candidateId: test.candidateId,
-          testTypeId: test.testTypeId,
-          testType: test.TestType,
-          testDate: test.testDate,
-          testCompleteDate: test.testCompleteDate,
+          issueDate: test.issueDate,
           worryValue: test.worryValue,
           optimismValue: test.optimismValue,
           consistency: test.consistency,
-          testPassed: test.testPassed
+          emotionScore: test.emotionScore,
+          currentStatus: test.currentStatus
         } : null
       };
-    });
+    }));
 
     res.json({
       tests: resultCandidates,
@@ -95,13 +101,7 @@ router.get('/', authenticate, async (req, res, next) => {
 router.get('/candidate/:candidateId', authenticate, async (req, res, next) => {
   try {
     const test = await Test.findOne({
-      where: { candidateId: req.params.candidateId },
-      include: [
-        {
-          model: TestType,
-          attributes: ['id', 'name']
-        }
-      ]
+      where: { candidateId: req.params.candidateId }
     });
     res.json({ test });
   } catch (error) {
@@ -111,53 +111,41 @@ router.get('/candidate/:candidateId', authenticate, async (req, res, next) => {
 
 router.post('/', authenticate, async (req, res, next) => {
   try {
-    const { candidateId, testTypeId, testDate, testCompleteDate, worryValue, optimismValue, consistency, testPassed } = req.body;
+    const { candidateId, issueDate, worryValue, optimismValue, consistency, emotionScore, currentStatus } = req.body;
 
     const candidate = await Candidate.findByPk(candidateId);
     if (!candidate) {
       return res.status(400).json({ error: 'Candidate not found' });
     }
 
-    if (testTypeId) {
-      const testType = await TestType.findByPk(testTypeId);
-      if (!testType) {
-        return res.status(400).json({ error: 'Test type not found' });
-      }
-    }
-
     const [test, created] = await Test.findOrCreate({
       where: { candidateId },
       defaults: {
-        testTypeId,
-        testDate,
-        testCompleteDate,
+        issueDate,
         worryValue,
         optimismValue,
         consistency,
-        testPassed
+        emotionScore,
+        currentStatus: currentStatus || 'pending'
       }
     });
 
     if (!created) {
       await test.update({
-        testTypeId,
-        testDate,
-        testCompleteDate,
+        issueDate,
         worryValue,
         optimismValue,
         consistency,
-        testPassed
+        emotionScore,
+        currentStatus: currentStatus || 'pending'
       });
     }
 
-    const updatedTest = await Test.findByPk(test.id, {
-      include: [
-        {
-          model: TestType,
-          attributes: ['id', 'name']
-        }
-      ]
-    });
+    if (currentStatus === 'passed' || currentStatus === 'failed' || currentStatus === 'abandoned') {
+      await StageService.updateStage(candidateId, 'test_complete', req.user?.id);
+    }
+
+    const updatedTest = await Test.findByPk(test.id);
 
     res.json(updatedTest);
   } catch (error) {
@@ -172,33 +160,22 @@ router.put('/:id', authenticate, async (req, res, next) => {
       return res.status(404).json({ error: 'Test not found' });
     }
 
-    const { testTypeId, testDate, testCompleteDate, worryValue, optimismValue, consistency, testPassed } = req.body;
-
-    if (testTypeId) {
-      const testType = await TestType.findByPk(testTypeId);
-      if (!testType) {
-        return res.status(400).json({ error: 'Test type not found' });
-      }
-    }
+    const { issueDate, worryValue, optimismValue, consistency, emotionScore, currentStatus } = req.body;
 
     await test.update({
-      testTypeId,
-      testDate,
-      testCompleteDate,
-      worryValue,
-      optimismValue,
-      consistency,
-      testPassed
+        issueDate,
+        worryValue,
+        optimismValue,
+        consistency,
+        emotionScore,
+        currentStatus: currentStatus || 'pending'
     });
 
-    const updatedTest = await Test.findByPk(test.id, {
-      include: [
-        {
-          model: TestType,
-          attributes: ['id', 'name']
-        }
-      ]
-    });
+    if (currentStatus === 'passed' || currentStatus === 'failed' || currentStatus === 'abandoned') {
+      await StageService.updateStage(test.candidateId, 'test_complete', req.user?.id);
+    }
+
+    const updatedTest = await Test.findByPk(test.id);
 
     res.json(updatedTest);
   } catch (error) {

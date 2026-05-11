@@ -1,6 +1,8 @@
+
 const express = require('express');
-const { Candidate, User, ProductLine, ExamPaper, TestType, CandidateProductLine, Interview, Employee } = require('../models');
+const { Candidate, User, BusinessLine, ExamPaper, Interview, InterviewRound, Employee, Test, CandidateStage } = require('../models');
 const { authenticate } = require('../middleware/auth');
+const StageService = require('../services/stageService');
 
 const router = express.Router();
 
@@ -28,17 +30,41 @@ router.get('/', authenticate, async (req, res, next) => {
     const { Op } = require('sequelize');
     
     const where = {};
+    const include = [
+      {
+        model: User,
+        as: 'lastOperator',
+        attributes: ['id', 'username', 'realName']
+      },
+      {
+        model: CandidateStage,
+        attributes: ['currentStage', 'consultantId'],
+        include: [
+          {
+            model: User,
+            as: 'consultant',
+            attributes: ['id', 'username', 'realName']
+          }
+        ]
+      }
+    ];
+    const stageWhere = {};
     
     if (name) {
       where.name = { [Op.like]: `%${name}%` };
     }
-    
-    if (currentStage) {
-      where.currentStage = currentStage;
-    } else if (stages) {
-      // 处理阶段列表参数
-      const stagesArray = Array.isArray(stages) ? stages : stages.split(',');
-      where.currentStage = { [Op.in]: stagesArray };
+
+    if (currentStage && currentStage !== '') {
+      stageWhere.currentStage = currentStage;
+    }
+
+    if (stages && stages !== '') {
+      const stageArray = stages.split(',');
+      stageWhere.currentStage = { [Op.in]: stageArray };
+    }
+
+    if (Object.keys(stageWhere).length > 0) {
+      include[1].where = stageWhere;
     }
 
     const { count, rows } = await Candidate.findAndCountAll({
@@ -46,22 +72,22 @@ router.get('/', authenticate, async (req, res, next) => {
       order: [['created_at', 'DESC']],
       limit: parseInt(pageSize),
       offset: (parseInt(page) - 1) * parseInt(pageSize),
-      include: [
-        {
-          model: User,
-          as: 'lastOperator',
-          attributes: ['id', 'username', 'realName']
-        },
-        {
-          model: User,
-          as: 'consultant',
-          attributes: ['id', 'username', 'realName']
+      include
+    });
+
+    const candidatesWithStage = rows.map(candidate => {
+      const candidateObj = candidate.toJSON();
+      if (candidateObj.CandidateStage) {
+        candidateObj.currentStage = candidateObj.CandidateStage.currentStage;
+        if (candidateObj.CandidateStage.consultant) {
+          candidateObj.consultant = candidateObj.CandidateStage.consultant;
         }
-      ]
+      }
+      return candidateObj;
     });
 
     res.json({
-      candidates: rows,
+      candidates: candidatesWithStage,
       pagination: {
         page: parseInt(page),
         pageSize: parseInt(pageSize),
@@ -81,6 +107,17 @@ router.get('/:id', authenticate, async (req, res, next) => {
           model: User,
           as: 'lastOperator',
           attributes: ['id', 'username', 'realName']
+        },
+        {
+          model: CandidateStage,
+          attributes: ['currentStage', 'consultantId'],
+          include: [
+            {
+              model: User,
+              as: 'consultant',
+              attributes: ['id', 'username', 'realName']
+            }
+          ]
         }
       ]
     });
@@ -89,33 +126,39 @@ router.get('/:id', authenticate, async (req, res, next) => {
       return res.status(404).json({ error: 'Candidate not found' });
     }
 
-    const productLines = await CandidateProductLine.findAll({
+    const interview = await Interview.findOne({
       where: { candidateId: candidate.id },
       include: [
         {
-          model: Interview,
-          attributes: ['id', 'currentStage', 'finalStatus']
+          model: BusinessLine,
+          as: 'BusinessLine',
+          attributes: ['id', 'name']
+        },
+        {
+          model: InterviewRound,
+          as: 'rounds'
         }
       ]
     });
 
-    const productLineDetails = [];
-    for (const pl of productLines) {
-      const productLine = await ProductLine.findByPk(pl.productLineId);
-      if (productLine) {
-        productLineDetails.push({
-          id: productLine.id,
-          name: productLine.name,
-          clientOwner: productLine.clientOwner,
+    let businessLineDetails = null;
+    if (interview) {
+      const businessLine = interview.BusinessLine;
+      const rounds = interview.rounds || [];
+      if (businessLine) {
+        const candidateStage = await StageService.getStage(interview.candidateId);
+        const stage = candidateStage ? candidateStage.currentStage : 'candidate_entry';
+        businessLineDetails = {
+          id: businessLine.id,
+          name: businessLine.name,
           through: {
-            id: pl.id,
-            productLineId: pl.productLineId,
-            interviewStage: pl.interviewStage,
-            recommendDate: pl.recommendDate,
-            currentStage: pl.Interview?.currentStage,
-            finalStatus: pl.Interview?.finalStatus
+            id: interview.id,
+            businessLineId: interview.businessLineId,
+            interviewStage: stage,
+            currentStage: stage,
+            currentStatus: interview.currentStatus
           }
-        });
+        };
       }
     }
 
@@ -123,7 +166,14 @@ router.get('/:id', authenticate, async (req, res, next) => {
     if (candidate.lastOperator) {
       candidateObj.lastOperator = candidate.lastOperator.toJSON();
     }
-    candidateObj.productLines = productLineDetails;
+    candidateObj.businessLines = businessLineDetails ? [businessLineDetails] : [];
+    
+    if (candidate.CandidateStage) {
+      candidateObj.currentStage = candidate.CandidateStage.currentStage;
+      if (candidate.CandidateStage.consultant) {
+        candidateObj.consultant = candidate.CandidateStage.consultant.toJSON();
+      }
+    }
 
     res.json({ candidate: candidateObj });
   } catch (error) {
@@ -140,7 +190,7 @@ router.post('/', authenticate, async (req, res, next) => {
       gender,
       idCard,
       consultantId,
-      productLines
+      businessLines
     } = req.body;
 
     if (!name) {
@@ -179,39 +229,34 @@ router.post('/', authenticate, async (req, res, next) => {
       phone,
       gender,
       idCard,
-      consultantId,
-      currentStage: 'candidate_entry',
       lastOperatorId: req.user.id
     });
 
-    if (productLines && Array.isArray(productLines)) {
-      for (const pl of productLines) {
-        const newAssociation = await CandidateProductLine.create({
-          candidateId: candidate.id,
-          productLineId: pl.productLineId,
-          interviewStage: 'recommend_interview'
-        });
+    await StageService.initStage(candidate.id, 'candidate_entry', req.user.id, consultantId);
 
-        await Interview.create({
-          candidateProductLineId: newAssociation.id,
-          currentStage: 'recommend_interview',
-          finalStatus: 'pending'
-        });
-      }
+    if (businessLines && Array.isArray(businessLines) && businessLines.length > 0) {
+      const pl = businessLines[0];
+      const interview = await Interview.create({
+        candidateId: candidate.id,
+        businessLineId: pl.businessLineId,
+        currentStatus: 'progressing'
+      });
+      
+      // 初始化 recommend_interview 阶段数据
+      await InterviewRound.findOrCreate({
+        where: {
+          interviewId: interview.id,
+          stageCode: 'recommend_interview'
+        },
+        defaults: {
+          stageIndex: STAGES.indexOf('recommend_interview'),
+          scheduledDate: new Date(),
+          currentStatus: 'pending_filter'
+        }
+      });
     }
 
-    await candidate.reload({
-      include: [
-        {
-          model: ProductLine,
-          as: 'productLines',
-          through: {
-            attributes: ['id', 'productLineId', 'interviewStage', 'recommendDate']
-          },
-          attributes: ['id', 'name', 'clientOwner']
-        }
-      ]
-    });
+    await candidate.reload();
 
     res.status(201).json({
       message: 'Candidate created successfully',
@@ -230,7 +275,7 @@ router.put('/:id', authenticate, async (req, res, next) => {
       return res.status(404).json({ error: 'Candidate not found' });
     }
 
-    const { productLines, ...basicInfo } = req.body;
+    const { businessLines, ...basicInfo } = req.body;
 
     if (!basicInfo.name) {
       return res.status(400).json({ error: 'Name is required' });
@@ -262,7 +307,7 @@ router.put('/:id', authenticate, async (req, res, next) => {
       }
     }
 
-    const allowedFields = ['name', 'email', 'phone', 'gender', 'idCard', 'currentStage', 'consultantId'];
+    const allowedFields = ['name', 'email', 'phone', 'gender', 'idCard', 'consultantId'];
     const updateData = {
       lastOperatorId: req.user.id
     };
@@ -274,68 +319,50 @@ router.put('/:id', authenticate, async (req, res, next) => {
 
     await candidate.update(updateData);
 
-    if (productLines && Array.isArray(productLines)) {
-      const existingAssociations = await CandidateProductLine.findAll({
+    if (businessLines && Array.isArray(businessLines)) {
+      const existingInterview = await Interview.findOne({
         where: { candidateId: candidate.id }
       });
 
-      const existingIds = new Set(existingAssociations.map(assoc => assoc.id));
-      const incomingIds = new Set(productLines.filter(pl => pl.id).map(pl => pl.id));
-
-      for (const pl of productLines) {
-        if (pl.id) {
-          await CandidateProductLine.update({
-            productLineId: pl.productLineId,
-            recommendDate: pl.recommendDate,
-            interviewStage: pl.interviewStage
-          }, {
-            where: { id: pl.id, candidateId: candidate.id }
+      if (businessLines.length > 0) {
+        const pl = businessLines[0];
+        if (existingInterview) {
+          await existingInterview.update({
+            businessLineId: pl.businessLineId !== undefined ? pl.businessLineId : existingInterview.businessLineId,
+            currentStatus: pl.currentStatus !== undefined ? pl.currentStatus : existingInterview.currentStatus
           });
-
-          if (pl.currentStage || pl.finalStatus) {
-            await Interview.update({
-              currentStage: pl.currentStage,
-              finalStatus: pl.finalStatus
-            }, {
-              where: { candidateProductLineId: pl.id }
-            });
+          if (pl.currentStage) {
+            await StageService.updateStage(candidate.id, pl.currentStage, req.user.id);
           }
-
-          existingIds.delete(pl.id);
         } else {
-          const newAssociation = await CandidateProductLine.create({
+          const interview = await Interview.create({
             candidateId: candidate.id,
-            productLineId: pl.productLineId,
-            interviewStage: pl.interviewStage || 'recommend_interview',
-            recommendDate: pl.recommendDate
+            businessLineId: pl.businessLineId,
+            currentStatus: 'progressing'
           });
-
-          await Interview.create({
-            candidateProductLineId: newAssociation.id,
-            currentStage: pl.currentStage || 'recommend_interview',
-            finalStatus: pl.finalStatus || 'pending'
+          if (pl.currentStage) {
+            await StageService.updateStage(candidate.id, pl.currentStage, req.user.id);
+          }
+          
+          // 初始化 recommend_interview 阶段数据
+          await InterviewRound.findOrCreate({
+            where: {
+              interviewId: interview.id,
+              stageCode: 'recommend_interview'
+            },
+            defaults: {
+              stageIndex: STAGES.indexOf('recommend_interview'),
+              scheduledDate: new Date(),
+              currentStatus: 'pending_filter'
+            }
           });
         }
-      }
-
-      for (const id of existingIds) {
-        await Interview.destroy({ where: { candidateProductLineId: id } });
-        await CandidateProductLine.destroy({ where: { id } });
+      } else if (existingInterview) {
+        await existingInterview.destroy();
       }
     }
 
-    await candidate.reload({
-      include: [
-        {
-          model: ProductLine,
-          as: 'productLines',
-          through: {
-            attributes: ['id', 'productLineId', 'interviewStage', 'recommendDate']
-          },
-          attributes: ['id', 'name', 'clientOwner']
-        }
-      ]
-    });
+    await candidate.reload();
 
     res.json({
       message: 'Candidate updated successfully',
@@ -348,132 +375,53 @@ router.put('/:id', authenticate, async (req, res, next) => {
 
 router.put('/:id/advance', authenticate, async (req, res, next) => {
   try {
-    const { productLineId } = req.body;
+    const candidate = await Candidate.findByPk(req.params.id);
+    if (!candidate) {
+      return res.status(404).json({ error: 'Candidate not found' });
+    }
 
-    if (productLineId) {
-      const candidateProductLine = await CandidateProductLine.findOne({
-        where: {
-          candidateId: req.params.id,
-          productLineId
+    const candidateStage = await StageService.getStage(candidate.id);
+    const currentStage = candidateStage ? candidateStage.currentStage : 'candidate_entry';
+    const currentIndex = STAGES.indexOf(currentStage);
+    if (currentIndex === -1 || currentIndex >= STAGES.length - 1) {
+      return res.status(400).json({ error: 'Candidate already at final stage' });
+    }
+
+    const nextStage = STAGES[currentIndex + 1];
+    await StageService.updateStage(candidate.id, nextStage, req.user.id);
+
+    if (nextStage === 'test_declare') {
+      await Test.findOrCreate({
+        where: { candidateId: candidate.id },
+        defaults: {
+          issueDate: new Date(),
+          currentStatus: 'pending'
         }
       });
+    }
 
-      if (!candidateProductLine) {
-        return res.status(404).json({ error: 'Candidate-product line association not found' });
-      }
-
-      const currentIndex = STAGES.indexOf(candidateProductLine.interviewStage);
-      if (currentIndex === -1 || currentIndex >= STAGES.length - 1) {
-        return res.status(400).json({ error: 'Candidate already at final stage for this product line' });
-      }
-
-      const nextStage = STAGES[currentIndex + 1];
-      await candidateProductLine.update({ interviewStage: nextStage });
-
-      const interview = await Interview.findOne({
-        where: { candidateProductLineId: candidateProductLine.id }
-      });
-
-      if (interview) {
-        await interview.update({ currentStage: nextStage });
-      }
-
-      const candidate = await Candidate.findByPk(req.params.id);
-      await candidate.update({ currentStage: nextStage, lastOperatorId: req.user.id });
-
-      if (nextStage === 'pending_onboarding') {
-        const allProductLines = await CandidateProductLine.findAll({
-          where: { candidateId: candidate.id }
-        });
-
-        if (allProductLines.length > 0) {
-          for (const pl of allProductLines) {
-            await Employee.findOrCreate({
-              where: {
-                candidateId: candidate.id,
-                productLineId: pl.productLineId
-              },
-              defaults: {
-                name: candidate.name,
-                email: candidate.email,
-                phone: candidate.phone,
-                gender: candidate.gender,
-                idCard: candidate.idCard,
-                currentStage: 'pending_onboarding',
-                lastOperatorId: req.user.id
-              }
-            });
-          }
-        }
-      }
-
-      res.json({
-        message: 'Candidate advanced to next stage',
-        candidate
-      });
-    } else {
-      const candidate = await Candidate.findByPk(req.params.id);
-      if (!candidate) {
-        return res.status(404).json({ error: 'Candidate not found' });
-      }
-
-      const currentIndex = STAGES.indexOf(candidate.currentStage || 'candidate_entry');
-      if (currentIndex === -1 || currentIndex >= STAGES.length - 1) {
-        return res.status(400).json({ error: 'Candidate already at final stage' });
-      }
-
-      const nextStage = STAGES[currentIndex + 1];
-      await candidate.update({
-        currentStage: nextStage,
-        lastOperatorId: req.user.id
-      });
-
-      const candidateProductLines = await CandidateProductLine.findAll({
+    if (nextStage === 'pending_onboarding') {
+      const interviewWithPL = await Interview.findOne({
         where: { candidateId: candidate.id }
       });
 
-      for (const cpl of candidateProductLines) {
-        await cpl.update({ interviewStage: nextStage });
-        
-        const interview = await Interview.findOne({
-          where: { candidateProductLineId: cpl.id }
-        });
-        if (interview) {
-          await interview.update({ currentStage: nextStage });
-        }
-      }
-
-      if (nextStage === 'pending_onboarding') {
-        const allProductLines = await CandidateProductLine.findAll({
-          where: { candidateId: candidate.id }
-        });
-
-        if (allProductLines.length > 0) {
-          for (const pl of allProductLines) {
-            await Employee.findOrCreate({
-              where: {
-                candidateId: candidate.id,
-                productLineId: pl.productLineId
-              },
-              defaults: {
-                name: candidate.name,
-                email: candidate.email,
-                phone: candidate.phone,
-                gender: candidate.gender,
-                idCard: candidate.idCard,
-                currentStage: 'pending_onboarding',
-                lastOperatorId: req.user.id
-              }
-            });
+      if (interviewWithPL && interviewWithPL.businessLineId) {
+        await Employee.findOrCreate({
+          where: {
+            candidateId: candidate.id,
+            businessLineId: interviewWithPL.businessLineId
+          },
+          defaults: {
+            updatedBy: req.user.id
           }
-        }
+        });
       }
-
-      res.json({
-        message: 'Candidate advanced to next stage',
-        candidate
-      });
     }
+
+    res.json({
+      message: 'Candidate advanced to next stage',
+      candidate
+    });
   } catch (error) {
     next(error);
   }
@@ -481,67 +429,25 @@ router.put('/:id/advance', authenticate, async (req, res, next) => {
 
 router.put('/:id/rollback', authenticate, async (req, res, next) => {
   try {
-    const { productLineId } = req.body;
-
-    if (productLineId) {
-      const candidateProductLine = await CandidateProductLine.findOne({
-        where: {
-          candidateId: req.params.id,
-          productLineId
-        }
-      });
-
-      if (!candidateProductLine) {
-        return res.status(404).json({ error: 'Candidate-product line association not found' });
-      }
-
-      const currentIndex = STAGES.indexOf(candidateProductLine.interviewStage);
-      if (currentIndex <= 0) {
-        return res.status(400).json({ error: 'Candidate already at first stage for this product line' });
-      }
-
-      const prevStage = STAGES[currentIndex - 1];
-      await candidateProductLine.update({ interviewStage: prevStage });
-
-      const interview = await Interview.findOne({
-        where: { candidateProductLineId: candidateProductLine.id }
-      });
-
-      if (interview) {
-        await interview.update({ currentStage: prevStage });
-      }
-
-      await Candidate.update(
-        { lastOperatorId: req.user.id },
-        { where: { id: req.params.id } }
-      );
-
-      res.json({
-        message: 'Candidate rolled back to previous stage',
-        candidateProductLine
-      });
-    } else {
-      const candidate = await Candidate.findByPk(req.params.id);
-      if (!candidate) {
-        return res.status(404).json({ error: 'Candidate not found' });
-      }
-
-      const currentIndex = STAGES.indexOf(candidate.currentStage || 'candidate_entry');
-      if (currentIndex <= 0) {
-        return res.status(400).json({ error: 'Candidate already at first stage' });
-      }
-
-      const prevStage = STAGES[currentIndex - 1];
-      await candidate.update({
-        currentStage: prevStage,
-        lastOperatorId: req.user.id
-      });
-
-      res.json({
-        message: 'Candidate rolled back to previous stage',
-        candidate
-      });
+    const candidate = await Candidate.findByPk(req.params.id);
+    if (!candidate) {
+      return res.status(404).json({ error: 'Candidate not found' });
     }
+
+    const candidateStage = await StageService.getStage(candidate.id);
+    const currentStage = candidateStage ? candidateStage.currentStage : 'candidate_entry';
+    const currentIndex = STAGES.indexOf(currentStage);
+    if (currentIndex <= 0) {
+      return res.status(400).json({ error: 'Candidate already at first stage' });
+    }
+
+    const prevStage = STAGES[currentIndex - 1];
+    await StageService.updateStage(candidate.id, prevStage, req.user.id);
+
+    res.json({
+      message: 'Candidate rolled back to previous stage',
+      candidate
+    });
   } catch (error) {
     next(error);
   }
@@ -555,11 +461,8 @@ router.delete('/:id', authenticate, async (req, res, next) => {
       return res.status(404).json({ error: 'Candidate not found' });
     }
 
-    const associations = await CandidateProductLine.findAll({ where: { candidateId: candidate.id } });
-    for (const assoc of associations) {
-      await Interview.destroy({ where: { candidateProductLineId: assoc.id } });
-    }
-    await CandidateProductLine.destroy({ where: { candidateId: candidate.id } });
+    await Interview.destroy({ where: { candidateId: candidate.id } });
+    await StageService.deleteStage(candidate.id);
 
     await candidate.destroy();
 
@@ -576,76 +479,50 @@ router.get('/:id/can-recommend', authenticate, async (req, res, next) => {
       return res.status(404).json({ error: 'Candidate not found' });
     }
 
-    const productLines = await ProductLine.findAll({ where: { isActive: true } });
-    if (!productLines || productLines.length === 0) {
-      return res.json({ canRecommend: false, reason: '没有可用的产品线' });
+    const candidateStage = await StageService.getStage(candidate.id);
+    const currentStage = candidateStage ? candidateStage.currentStage : 'candidate_entry';
+
+    if (currentStage !== 'test_complete') {
+      return res.json({ canRecommend: false, reason: '当前阶段不是韧测完成，不能面推' });
     }
 
-    const existingAssociations = await CandidateProductLine.findAll({
-      where: { candidateId: candidate.id },
-      include: [{ model: Interview }]
+    const existingInterview = await Interview.findOne({
+      where: { candidateId: candidate.id }
     });
 
-    if (existingAssociations.length === 0) {
-      const availableProductLines = productLines.map(pl => ({
-        id: pl.id,
-        name: pl.name,
-        clientOwner: pl.clientOwner
-      }));
-      return res.json({ canRecommend: true, reason: '没有面试记录，可以面推', availableProductLines });
+    if (existingInterview) {
+      return res.json({ canRecommend: false, reason: '已存在面试记录，只能面推一次' });
     }
 
-    const hasPassedOrPendingRecord = existingAssociations.some(assoc => {
-      return assoc.Interview && (assoc.Interview.finalStatus === 'passed' || assoc.Interview.finalStatus === 'pending');
-    });
-
-    if (hasPassedOrPendingRecord) {
-      return res.json({ canRecommend: false, reason: '存在通过或面试中的记录，不能面推' });
-    }
-
-    const usedProductLineIds = existingAssociations.map(assoc => assoc.productLineId);
-    const availableProductLines = productLines
-      .filter(pl => !usedProductLineIds.includes(pl.id))
-      .map(pl => ({
-        id: pl.id,
-        name: pl.name,
-        clientOwner: pl.clientOwner
-      }));
-
-    if (availableProductLines.length === 0) {
-      return res.json({ canRecommend: false, reason: '所有产品线都已有面试记录' });
-    }
-
-    return res.json({ canRecommend: true, reason: '可以面推到其他产品线', availableProductLines });
+    return res.json({ canRecommend: true, reason: '可以面推' });
   } catch (error) {
     next(error);
   }
 });
 
-router.get('/:id/available-product-lines', authenticate, async (req, res, next) => {
+router.get('/:id/available-business-lines', authenticate, async (req, res, next) => {
   try {
     const candidate = await Candidate.findByPk(req.params.id);
     if (!candidate) {
       return res.status(404).json({ error: 'Candidate not found' });
     }
 
-    const allProductLines = await ProductLine.findAll({ where: { isActive: true } });
+    const allBusinessLines = await BusinessLine.findAll({ where: { isActive: true } });
 
-    const existingAssociations = await CandidateProductLine.findAll({
+    const existingInterview = await Interview.findOne({
       where: { candidateId: candidate.id }
     });
 
-    const usedProductLineIds = existingAssociations.map(assoc => assoc.productLineId);
+    const usedBusinessLineId = existingInterview?.businessLineId;
 
-    const availableProductLines = allProductLines
-      .filter(pl => !usedProductLineIds.includes(pl.id))
+    const availableBusinessLines = allBusinessLines
+      .filter(pl => pl.id !== usedBusinessLineId)
       .map(pl => ({
         id: pl.id,
-        name: pl.name,
-        clientOwner: pl.clientOwner
+        name: pl.name
       }));
 
-    res.json({ productLines: availableProductLines });
+    res.json({ businessLines: availableBusinessLines });
   } catch (error) {
     next(error);
   }
@@ -656,64 +533,49 @@ router.post('/:id/push-interview', authenticate, async (req, res, next) => {
   const transaction = await sequelize.transaction();
 
   try {
-    const { productLineId, recommendDate } = req.body;
-
-    if (!productLineId) {
-      await transaction.rollback();
-      return res.status(400).json({ error: '请选择产品线' });
-    }
-
-    if (!recommendDate) {
-      await transaction.rollback();
-      return res.status(400).json({ error: '请选择推荐日期' });
-    }
-
     const candidate = await Candidate.findByPk(req.params.id);
     if (!candidate) {
       await transaction.rollback();
       return res.status(404).json({ error: 'Candidate not found' });
     }
 
-    if (candidate.currentStage === 'entry' || candidate.currentStage === 'leave') {
+    const candidateStage = await StageService.getStage(candidate.id);
+    const currentStage = candidateStage ? candidateStage.currentStage : 'candidate_entry';
+    if (currentStage === 'entry' || currentStage === 'leave') {
       await transaction.rollback();
       return res.status(400).json({ error: '候选人已入职或离职，不能面推' });
     }
 
-    const existingAssociation = await CandidateProductLine.findOne({
-      where: {
-        candidateId: candidate.id,
-        productLineId
-      }
+    const existingInterview = await Interview.findOne({
+      where: { candidateId: candidate.id }
     });
 
-    if (existingAssociation) {
+    if (existingInterview) {
       await transaction.rollback();
-      return res.status(400).json({ error: '该候选人已在该产品线有面试记录' });
+      return res.status(400).json({ error: '该候选人已有面试记录' });
     }
 
-    const newAssociation = await CandidateProductLine.create({
+    const today = new Date();
+    
+    const interview = await Interview.create({
       candidateId: candidate.id,
-      productLineId,
-      recommendDate,
-      interviewStage: 'recommend_interview'
+      currentStatus: 'pending'
     }, { transaction });
 
-    await Interview.create({
-      candidateProductLineId: newAssociation.id,
-      currentStage: 'recommend_interview',
-      finalStatus: 'pending'
+    await InterviewRound.create({
+      interviewId: interview.id,
+      stageCode: 'recommend_interview',
+      stageIndex: 0,
+      scheduledDate: today,
+      currentStatus: 'pending_filter'
     }, { transaction });
 
-    await candidate.update({
-      currentStage: 'recommend_interview',
-      lastOperatorId: req.user.id
-    }, { transaction });
+    await StageService.updateStage(candidate.id, 'recommend_interview', req.user.id, transaction);
 
     await transaction.commit();
 
     res.json({
-      message: '面推成功',
-      candidateProductLine: newAssociation
+      message: '面推成功'
     });
   } catch (error) {
     await transaction.rollback();

@@ -12,7 +12,7 @@ const InterviewRound = sequelize.define('InterviewRound', {
     field: 'interview_id',
     allowNull: false,
     references: {
-      model: 'Interview',
+      model: 'interview',
       key: 'id'
     }
   },
@@ -33,28 +33,37 @@ const InterviewRound = sequelize.define('InterviewRound', {
     field: 'scheduled_date',
     allowNull: true
   },
-  interviewer: {
-    type: DataTypes.STRING(100),
-    allowNull: true
-  },
   content: {
     type: DataTypes.TEXT,
     allowNull: true,
     comment: 'Interview evaluation/content'
   },
-  passed: {
-    type: DataTypes.BOOLEAN,
+  currentStatus: {
+    type: DataTypes.STRING(50),
+    field: 'current_status',
     allowNull: true,
-    comment: 'Whether this round passed'
+    comment: 'Current status of this round: pending_filter/passed/failed for recommend_interview; passed/failed for others'
+  },
+  feedbackDate: {
+    type: DataTypes.DATE,
+    field: 'feedback_date',
+    allowNull: true,
+    comment: 'Feedback date for this round'
   },
   completedAt: {
     type: DataTypes.DATE,
     field: 'completed_at',
     allowNull: true,
     comment: 'When this round was completed'
+  },
+  entryDate: {
+    type: DataTypes.DATE,
+    field: 'entry_date',
+    allowNull: true,
+    comment: 'Entry date for offer stage'
   }
 }, {
-  tableName: 'InterviewRound',
+  tableName: 'interview_round',
   timestamps: true,
   underscored: true,
   indexes: [

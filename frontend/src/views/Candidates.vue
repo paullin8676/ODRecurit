@@ -26,7 +26,7 @@
       </el-form>
 
       <el-table :data="candidates" v-loading="loading" stripe>
-        <el-table-column prop="name" label="姓名" width="100">
+        <el-table-column prop="name" label="姓名" width="100" fixed="left">
           <template #default="{ row, $index }">
             <template v-if="editingRowIndex === $index">
               <el-input v-model="editingForm.name" placeholder="请输入姓名" disabled />
@@ -45,7 +45,9 @@
               </el-select>
             </template>
             <template v-else>
-              {{ row.gender === 'male' ? '男' : row.gender === 'female' ? '女' : '-' }}
+              <span @click="handleEdit(row, $index)" style="cursor: pointer;">
+                {{ row.gender === 'male' ? '男' : row.gender === 'female' ? '女' : '-' }}
+              </span>
             </template>
           </template>
         </el-table-column>
@@ -55,7 +57,9 @@
               <el-input v-model="editingForm.phone" placeholder="请输入手机号" @keyup.enter="handleSave($index, row)" @keyup.esc="cancelEdit" :ref="editingRowIndex === $index ? 'phoneInputRef' : null" />
             </template>
             <template v-else>
-              {{ row.phone || '-' }}
+              <span @click="handleEdit(row, $index)" style="cursor: pointer;">
+                {{ row.phone || '-' }}
+              </span>
             </template>
           </template>
         </el-table-column>
@@ -77,7 +81,9 @@
               <el-input v-model="editingForm.idCard" placeholder="请输入身份证号" @keyup.enter="handleSave($index, row)" @keyup.esc="cancelEdit" />
             </template>
             <template v-else>
-              {{ row.idCard || '-' }}
+              <span @click="handleEdit(row, $index)" style="cursor: pointer;">
+                {{ row.idCard || '-' }}
+              </span>
             </template>
           </template>
         </el-table-column>
@@ -87,7 +93,9 @@
               <el-input v-model="editingForm.email" placeholder="请输入邮箱" @keyup.enter="handleSave($index, row)" @keyup.esc="cancelEdit" />
             </template>
             <template v-else>
-              {{ row.email || '-' }}
+              <span @click="handleEdit(row, $index)" style="cursor: pointer;">
+                {{ row.email || '-' }}
+              </span>
             </template>
           </template>
         </el-table-column>
@@ -189,13 +197,118 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="examPaperDialogVisible"
+      title="选择考试试卷"
+      width="500px"
+      @close="handleExamPaperDialogClose"
+    >
+      <el-form :model="advanceForm" label-width="100px">
+        <el-form-item label="试卷名称" prop="examPaperId">
+          <el-select v-model="advanceForm.examPaperId" placeholder="请选择试卷" style="width: 100%" @change="handleExamPaperChange">
+            <el-option
+              v-for="paper in examPapers"
+              :key="paper.id"
+              :label="paper.name"
+              :value="paper.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="机考日期">
+          <el-date-picker v-model="advanceForm.examDate" type="date" placeholder="请选择机考日期" style="width: 100%" disabled />
+        </el-form-item>
+        <el-form-item label="总分">
+          <el-input v-model.number="advanceForm.totalScore" type="number" placeholder="请输入总分" style="width: 100%" disabled />
+        </el-form-item>
+        <el-form-item label="通过线">
+          <el-input v-model.number="advanceForm.passLine" type="number" placeholder="请输入通过线" style="width: 100%" disabled />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="examPaperDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleConfirmAdvance">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="interviewDialogVisible"
+      title="推进到面试"
+      width="400px"
+      @close="handleInterviewDialogClose"
+    >
+      <el-form :model="interviewAdvanceForm" label-width="100px">
+      </el-form>
+      <template #footer>
+        <el-button @click="interviewDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleConfirmInterviewAdvance">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="detailDialogVisible"
+      title="查看候选人"
+      width="800px"
+      @close="handleDetailDialogClose"
+    >
+      <div v-if="selectedCandidate">
+        <el-divider content-position="left">基本信息</el-divider>
+        <el-form :model="selectedCandidate" label-width="120px" :disabled="true">
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item label="姓名">
+                <el-input :value="selectedCandidate.name" :disabled="true" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="性别">
+                <el-input :value="selectedCandidate.gender === 'male' ? '男' : selectedCandidate.gender === 'female' ? '女' : '-'" :disabled="true" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="手机号">
+                <el-input :value="selectedCandidate.phone" :disabled="true" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="邮箱">
+                <el-input :value="selectedCandidate.email" :disabled="true" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="身份证号">
+                <el-input :value="selectedCandidate.idCard" :disabled="true" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="当前阶段">
+                <el-input :value="selectedCandidate.currentStage ? stageNames[selectedCandidate.currentStage] : '-'" :disabled="true" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="负责顾问">
+                <el-input :value="selectedCandidate.consultant?.realName || selectedCandidate.consultant?.username || '-'" :disabled="true" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="录入日期">
+                <el-input :value="formatDate(selectedCandidate.createdAt)" :disabled="true" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </el-form>
+      </div>
+      <template #footer>
+        <el-button @click="detailDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { candidateApi, stageConfigApi, userApi } from '../api'
+import { candidateApi, stageConfigApi, userApi, examPaperApi, examApi, interviewApi } from '../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, Refresh } from '@element-plus/icons-vue'
 
@@ -242,6 +355,23 @@ const formRef = ref()
 const isEdit = ref(false)
 const currentId = ref(null)
 const editingRowIndex = ref(-1)
+
+const examPapers = ref([])
+const examPaperDialogVisible = ref(false)
+const interviewDialogVisible = ref(false)
+const advancingCandidate = ref(null)
+const detailDialogVisible = ref(false)
+const selectedCandidate = ref(null)
+
+const advanceForm = reactive({
+  examPaperId: null,
+  examDate: '',
+  totalScore: '',
+  passLine: ''
+})
+
+const interviewAdvanceForm = reactive({
+})
 
 const editingForm = reactive({
   name: '',
@@ -358,8 +488,14 @@ const handleCreate = () => {
   }
 }
 
-const handleView = (row) => {
-  router.push(`/candidates/${row.id}`)
+const handleView = async (row) => {
+  try {
+    const data = await candidateApi.getById(row.id)
+    selectedCandidate.value = data.candidate
+    detailDialogVisible.value = true
+  } catch (error) {
+    ElMessage.error('获取候选人详情失败')
+  }
 }
 
 const handleEdit = (row, index) => {
@@ -467,9 +603,25 @@ const isCurrentStage = (row) => {
   return availableStages.value.length > 0 && row.currentStage === availableStages.value[0]
 }
 
-const handleAdvance = async (row) => {
+const handleAdvance = (row) => {
+  if (row.currentStage === 'candidate_entry') {
+    if (examPapers.value.length === 0) {
+      ElMessage.warning('请先配置考试试卷')
+      return
+    }
+    advancingCandidate.value = row
+    examPaperDialogVisible.value = true
+  } else if (row.currentStage === 'test_complete') {
+    advancingCandidate.value = row
+    interviewDialogVisible.value = true
+  } else {
+    doAdvance(row)
+  }
+}
+
+const doAdvance = async (row) => {
   try {
-    await candidateApi.advance(row.id, { productLineId: row.productLine?.id })
+    await candidateApi.advance(row.id, { businessLineId: row.businessLine?.id })
     ElMessage.success('推进成功')
     fetchCandidates()
   } catch (error) {
@@ -477,9 +629,97 @@ const handleAdvance = async (row) => {
   }
 }
 
+const handleExamPaperChange = (value) => {
+  const paper = examPapers.value.find(p => p.id === value)
+  if (paper) {
+    advanceForm.examDate = paper.examDate || ''
+    advanceForm.totalScore = paper.totalScore || ''
+    advanceForm.passLine = paper.passLine || ''
+  }
+}
+
+const handleConfirmInterviewAdvance = async () => {
+  try {
+    await interviewApi.create({
+      candidateId: advancingCandidate.value.id,
+      currentStage: 'recommend_interview',
+      currentStatus: 'pending'
+    })
+
+    await candidateApi.advance(advancingCandidate.value.id, {})
+
+    ElMessage.success('推进成功')
+    interviewDialogVisible.value = false
+    advancingCandidate.value = null
+    fetchCandidates()
+  } catch (error) {
+    ElMessage.error(error.message || '推进失败')
+  }
+}
+
+const handleInterviewDialogClose = () => {
+  advancingCandidate.value = null
+}
+
+const handleConfirmAdvance = async () => {
+  if (!advanceForm.examPaperId) {
+    ElMessage.error('请选择试卷')
+    return
+  }
+
+  if (!advanceForm.examDate) {
+    ElMessage.error('请选择机考日期')
+    return
+  }
+
+  if (!advanceForm.totalScore) {
+    ElMessage.error('请输入总分')
+    return
+  }
+
+  if (!advanceForm.passLine) {
+    ElMessage.error('请输入通过线')
+    return
+  }
+
+  try {
+    await examApi.create({
+      candidateId: advancingCandidate.value.id,
+      examPaperId: advanceForm.examPaperId,
+      examDate: advanceForm.examDate,
+      totalScore: advanceForm.totalScore,
+      passLine: advanceForm.passLine,
+      isOnlineExam: false,
+      examPassed: 'pending'
+    })
+
+    await candidateApi.advance(advancingCandidate.value.id, { businessLineId: advancingCandidate.value.businessLine?.id })
+
+    ElMessage.success('推进成功')
+    examPaperDialogVisible.value = false
+    advancingCandidate.value = null
+    advanceForm.examPaperId = null
+    advanceForm.examDate = ''
+    advanceForm.totalScore = ''
+    advanceForm.passLine = ''
+    fetchCandidates()
+  } catch (error) {
+    ElMessage.error(error.message || '推进失败')
+  }
+}
+
+const handleExamPaperDialogClose = () => {
+  advancingCandidate.value = null
+  advanceForm.examPaperId = null
+  advanceForm.examDate = ''
+  advanceForm.totalScore = ''
+  advanceForm.passLine = ''
+  advanceForm.examPaperId = null
+}
+
 const handleRollback = async (row) => {
   try {
-    await candidateApi.rollback(row.id, { productLineId: row.productLine?.id })
+    await candidateApi.rollback(row.id, { businessLineId: row.businessLine?.id })
     ElMessage.success('回退成功')
     fetchCandidates()
   } catch (error) {
@@ -525,6 +765,10 @@ const handleDialogClose = () => {
   })
 }
 
+const handleDetailDialogClose = () => {
+  selectedCandidate.value = null
+}
+
 const fetchConsultants = async () => {
   try {
     const data = await userApi.getAll({})
@@ -534,9 +778,18 @@ const fetchConsultants = async () => {
   }
 }
 
+const fetchExamPapers = async () => {
+  try {
+    const data = await examPaperApi.getAll({})
+    examPapers.value = data.examPapers || []
+  } catch (error) {
+    examPapers.value = []
+  }
+}
+
 onMounted(async () => {
-  // 先加载阶段配置和顾问数据
-  await Promise.all([fetchStageConfig(), fetchConsultants()])
+  // 先加载阶段配置、顾问数据和试卷列表
+  await Promise.all([fetchStageConfig(), fetchConsultants(), fetchExamPapers()])
   // 然后再获取候选人列表
   await fetchCandidates()
 })

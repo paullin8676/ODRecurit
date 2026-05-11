@@ -24,7 +24,7 @@
             <template #title>控制台</template>
           </el-menu-item>
 
-          <el-sub-menu index="candidates" v-if="authStore.isManager">
+          <el-sub-menu index="candidates">
             <template #title>
               <el-icon><User /></el-icon>
               <span>招聘管理</span>
@@ -36,7 +36,7 @@
             <el-menu-item index="/employee-management">员工管理</el-menu-item>
           </el-sub-menu>
 
-          <el-sub-menu index="statistics" v-if="authStore.isManager">
+          <el-sub-menu index="statistics">
             <template #title>
               <el-icon><DataAnalysis /></el-icon>
               <span>数据统计</span>
@@ -50,10 +50,8 @@
               <span>系统设置</span>
             </template>
             <el-menu-item index="/settings/users">用户管理</el-menu-item>
-            <el-menu-item index="/settings/product-lines">产品线配置</el-menu-item>
-            <el-menu-item index="/settings/exam-papers">试卷配置</el-menu-item>
-            <el-menu-item index="/settings/test-types">韧测类型</el-menu-item>
-            <el-menu-item index="/settings/exam-pass-lines">机考通过线</el-menu-item>
+            <el-menu-item index="/settings/business-lines">业务配置</el-menu-item>
+            <el-menu-item index="/settings/exam-papers">机考配置</el-menu-item>
             <el-menu-item index="/stage-config">阶段配置</el-menu-item>
           </el-sub-menu>
 

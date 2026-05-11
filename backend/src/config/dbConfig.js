@@ -16,6 +16,12 @@ const dbConfig = {
     timestamps: true,
     underscored: true,
     freezeTableName: true
+  },
+  dialectOptions: {
+    sqlite: {
+      maxConcurrentStatements: 100,
+      timeout: 5000
+    }
   }
 };
 

@@ -1,12 +1,14 @@
 const express = require('express');
 const { Op, fn, col, literal } = require('sequelize');
-const { Candidate, User, ProductLine, CandidateProductLine, Exam, Test, Employee, Interview, InterviewRound } = require('../models');
+const { Candidate, User, BusinessLine, Exam, Test, Employee, Interview, InterviewRound, CandidateStage } = require('../models');
 const { authenticate, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
 router.get('/by-consultant', authenticate, async (req, res, next) => {
   try {
+    const { startDate, endDate } = req.query;
+    
     const users = await User.findAll({
       where: {
         role: { [Op.in]: ['consultant', 'manager'] },
@@ -18,9 +20,15 @@ router.get('/by-consultant', authenticate, async (req, res, next) => {
 
     const results = [];
     for (const user of users) {
-      const count = await Candidate.count({
-        where: { consultantId: user.id }
-      });
+      const where = { consultantId: user.id };
+      
+      if (startDate || endDate) {
+        where.createdAt = {};
+        if (startDate) where.createdAt[Op.gte] = new Date(startDate);
+        if (endDate) where.createdAt[Op.lte] = new Date(endDate);
+      }
+      
+      const count = await CandidateStage.count({ where });
 
       results.push({
         consultantId: user.id,
@@ -46,8 +54,8 @@ router.get('/by-stage', authenticate, async (req, res, next) => {
       if (endDate) where.createdAt[Op.lte] = new Date(endDate);
     }
 
-    const results = await Candidate.findAll({
-      where,
+    const { CandidateStage } = require('../models');
+    const results = await CandidateStage.findAll({
       attributes: [
         'currentStage',
         [fn('COUNT', '*'), 'count']
@@ -75,7 +83,7 @@ router.get('/process-efficiency', authenticate, async (req, res, next) => {
 
     const candidates = await Candidate.findAll({
       where,
-      attributes: ['id', 'currentStage', 'createdAt']
+      attributes: ['id', 'createdAt']
     });
 
     const stats = {
@@ -91,8 +99,7 @@ router.get('/process-efficiency', authenticate, async (req, res, next) => {
 
       const exam = await Exam.findOne({ where: { candidateId } });
       const test = await Test.findOne({ where: { candidateId } });
-      const candidateProductLine = await CandidateProductLine.findOne({ where: { candidateId } });
-      const interview = candidateProductLine ? await Interview.findOne({ where: { candidateProductLineId: candidateProductLine.id } }) : null;
+      const interview = await Interview.findOne({ where: { candidateId } });
       const interviewRounds = interview ? await InterviewRound.findAll({ where: { interviewId: interview.id }, order: [['stageIndex', 'ASC']] }) : [];
 
       if (exam?.examDate && candidate.createdAt) {
@@ -108,10 +115,6 @@ router.get('/process-efficiency', authenticate, async (req, res, next) => {
 
       if (qualificationInterviewRound?.scheduledDate && recommendInterviewRound?.scheduledDate) {
         stats.recommendToQualification.push((new Date(qualificationInterviewRound.scheduledDate) - new Date(recommendInterviewRound.scheduledDate)) / (1000 * 60 * 60 * 24));
-      }
-
-      if (test?.testCompleteDate && candidate.createdAt) {
-        stats.preStageTotal.push((new Date(test.testCompleteDate) - new Date(candidate.createdAt)) / (1000 * 60 * 60 * 24));
       }
 
       const employee = await Employee.findOne({ where: { candidateId } });
@@ -141,38 +144,36 @@ router.get('/process-efficiency', authenticate, async (req, res, next) => {
 
 router.get('/summary', authenticate, async (req, res, next) => {
   try {
-    const where = {};
+    let total = await Candidate.count();
 
     if (req.user.role === 'consultant') {
-      where.consultantId = req.user.id;
+      total = await CandidateStage.count({ where: { consultantId: req.user.id } });
     }
 
-    const total = await Candidate.count();
-
-    const byStage = await Candidate.findAll({
+    const byStage = await CandidateStage.findAll({
       attributes: ['currentStage', [fn('COUNT', '*'), 'count']],
       group: ['currentStage']
     });
 
-    const byProductLine = await CandidateProductLine.findAll({
-      where,
-      attributes: ['productLineId', [fn('COUNT', '*'), 'count']],
-      include: [{ model: ProductLine, attributes: ['id', 'name'] }],
-      group: ['productLineId']
+    const byBusinessLine = await Interview.findAll({
+      attributes: ['businessLineId', [fn('COUNT', '*'), 'count']],
+      include: [{ model: BusinessLine, attributes: ['id', 'name'], as: 'BusinessLine' }],
+      where: { businessLineId: { [Op.not]: null } },
+      group: ['businessLineId']
     });
 
-    const passedExam = await Exam.count({ where: { examPassed: true } });
-    const passedTest = await Test.count({ where: { testPassed: true } });
-    const testComplete = await Candidate.count({ where: { currentStage: 'test_complete' } });
-    const pendingOnboarding = await Candidate.count({ where: { currentStage: 'pending_onboarding' } });
-    const inOffer = await Candidate.count({ where: { currentStage: 'offer' } });
-    const entered = await Employee.count({ where: { currentStage: 'entry' } });
+    const passedExam = await Exam.count({ where: { currentStatus: 'passed' } });
+    const passedTest = await Test.count({ where: { currentStatus: 'passed' } });
+    const testComplete = await CandidateStage.count({ where: { currentStage: 'test_complete' } });
+    const pendingOnboarding = await CandidateStage.count({ where: { currentStage: 'pending_onboarding' } });
+    const inOffer = await CandidateStage.count({ where: { currentStage: 'offer' } });
+    const entered = await CandidateStage.count({ where: { currentStage: 'entry' } });
 
     res.json({
       summary: {
         total,
         byStage,
-        byProductLine,
+        byBusinessLine,
         passedExam,
         passedTest,
         testComplete,

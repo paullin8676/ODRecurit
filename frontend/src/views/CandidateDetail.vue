@@ -57,7 +57,7 @@
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { candidateApi, productLineApi } from '../api'
+import { candidateApi, businessLineApi } from '../api'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Edit, Close, Plus } from '@element-plus/icons-vue'
 
@@ -71,8 +71,8 @@ const props = defineProps({
 const candidate = ref({})
 const form = reactive({})
 const activeTab = ref('basic')
-const productLines = ref([])
-const selectedProductLineIndex = ref(-1)
+const businessLines = ref([])
+const selectedBusinessLineIndex = ref(-1)
 
 const stageNames = {
   employee_entry: '候选录入',
@@ -93,9 +93,9 @@ const stageNames = {
 
 
 
-const selectedProductLine = computed(() => {
-  if (selectedProductLineIndex.value >= 0 && candidate.value.productLines) {
-    return candidate.value.productLines[selectedProductLineIndex.value]
+const selectedBusinessLine = computed(() => {
+  if (selectedBusinessLineIndex.value >= 0 && candidate.value.businessLines) {
+    return candidate.value.businessLines[selectedBusinessLineIndex.value]
   }
   return null
 })
@@ -107,11 +107,11 @@ const fetchCandidate = async () => {
     candidate.value = data.candidate
     Object.assign(form, data.candidate)
     
-    // Select the first product line if available
-    if (candidate.value.productLines && candidate.value.productLines.length > 0) {
-      selectedProductLineIndex.value = 0
+    // Select the first business line if available
+    if (candidate.value.businessLines && candidate.value.businessLines.length > 0) {
+      selectedBusinessLineIndex.value = 0
     } else {
-      selectedProductLineIndex.value = -1
+      selectedBusinessLineIndex.value = -1
     }
   } catch (error) {
     ElMessage.error('获取候选人信息失败')
@@ -121,14 +121,14 @@ const fetchCandidate = async () => {
 
 const fetchOptions = async () => {
   try {
-    const data = await productLineApi.getAll()
-    productLines.value = data.productLines || []
+    const data = await businessLineApi.getAll()
+    businessLines.value = data.businessLines || []
   } catch (error) {
   }
 }
 
-const selectProductLine = (index) => {
-  selectedProductLineIndex.value = index
+const selectBusinessLine = (index) => {
+  selectedBusinessLineIndex.value = index
 }
 
 onMounted(() => {

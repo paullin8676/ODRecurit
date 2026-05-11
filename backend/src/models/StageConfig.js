@@ -55,7 +55,7 @@ const StageConfig = (sequelize) => {
       }
     }
   }, {
-    tableName: 'StageConfig',
+    tableName: 'stage_config',
     timestamps: true
   });
 

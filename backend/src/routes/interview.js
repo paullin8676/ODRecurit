@@ -1,5 +1,8 @@
+
 const express = require('express');
-const { Interview, CandidateProductLine, InterviewRound, StageConfig, Candidate, Employee } = require('../models');
+const { Interview, InterviewRound, StageConfig, Candidate, CandidateStage, Employee, BusinessLine } = require('../models');
+const { authenticate } = require('../middleware/auth');
+const StageService = require('../services/stageService');
 
 const router = express.Router();
 
@@ -27,61 +30,145 @@ const STAGE_NAMES = {
   leave: '离职'
 };
 
-// Helper function to sync candidate current stage
-const syncCandidateStage = async (candidateId) => {
-  const candidateProductLines = await CandidateProductLine.findAll({
-    where: { candidateId },
-    include: [Interview]
+// Helper function to update interview currentStatus based on all rounds
+const updateInterviewStatus = async (interviewId) => {
+  const interview = await Interview.findByPk(interviewId, {
+    include: [{ model: InterviewRound, as: 'rounds' }]
+  });
+  
+  if (!interview) return;
+
+  const rounds = interview.rounds || [];
+  
+  const candidateStage = await StageService.getStage(interview.candidateId);
+  const currentStage = candidateStage ? candidateStage.currentStage : 'candidate_entry';
+  
+  // 如果已入职或离职，保持当前状态不变
+  if (currentStage === 'entry' || currentStage === 'leave') {
+    return;
+  }
+
+  let newStatus = 'progressing'; // 默认进行中
+
+  // 检查是否有任何阶段失败（放弃或未通过）- 在 pending_onboarding 之前的所有阶段
+  const PENDING_ONBOARDING_INDEX = INTERVIEW_STAGES.indexOf('pending_onboarding');
+  const failedStatuses = ['failed', 'abandoned'];
+  
+  const hasFailed = rounds.some(round => {
+    const stageIndex = INTERVIEW_STAGES.indexOf(round.stageCode);
+    return stageIndex < PENDING_ONBOARDING_INDEX && failedStatuses.includes(round.currentStatus);
   });
 
-  let targetStage = 'test_complete';
-
-  for (const cpl of candidateProductLines) {
-    if (cpl.Interview) {
-      if (cpl.Interview.finalStatus === 'passed') {
-        targetStage = cpl.Interview.currentStage;
-        break;
-      } else if (cpl.Interview.finalStatus === 'pending' && targetStage === 'test_complete') {
-        targetStage = cpl.Interview.currentStage;
-      }
+  if (hasFailed) {
+    newStatus = 'failed';
+  } else {
+    // 检查 offer 阶段是否通过
+    const offerRound = rounds.find(r => r.stageCode === 'offer');
+    if (offerRound && offerRound.currentStatus === 'passed') {
+      newStatus = 'passed';
     }
   }
 
-  await Candidate.update(
-    { currentStage: targetStage },
-    { where: { id: candidateId } }
-  );
+  if (interview.currentStatus !== newStatus) {
+    console.log(`更新 Interview ${interviewId} 状态: ${interview.currentStatus} -> ${newStatus}`);
+    await interview.update({ currentStatus: newStatus });
+  }
+};
+
+// Helper function to sync employee when offer is accepted
+const syncEmployeeOnOffer = async (interviewId, roundsData, operatorId) => {
+  const interview = await Interview.findByPk(interviewId, {
+    include: [
+      { model: Candidate, as: 'Candidate' },
+      { model: BusinessLine, as: 'BusinessLine' }
+    ]
+  });
+  
+  if (!interview || !interview.Candidate) return;
+
+  // 查找offer阶段的数据
+  const offerRoundData = roundsData.find(r => r.stageCode === 'offer');
+  
+  if (!offerRoundData) return;
+  
+  const candidate = interview.Candidate;
+  const candidateId = candidate.id;
+  
+  if (!candidateId) {
+    console.log(`候选人没有ID，无法同步employee`);
+    return;
+  }
+
+  // 查找已有的employee，通过candidateId关联
+  const employee = await Employee.findOne({ where: { candidateId: candidateId } });
+  const candidateStage = await StageService.getStage(candidateId);
+  const currentStage = candidateStage ? candidateStage.currentStage : null;
+  
+  if (offerRoundData.currentStatus === 'passed' && offerRoundData.entryDate) {
+    if (employee) {
+      // 如果状态是待入职或已入职，更新入职日期和业务线
+      if (currentStage === 'pending_onboarding' || currentStage === 'entry') {
+        await employee.update({
+          entryDate: offerRoundData.entryDate,
+          businessLineId: interview.businessLineId,
+          updatedBy: operatorId
+        });
+        console.log(`更新 Employee ${employee.id} 入职日期`);
+      }
+      // 如果已离职，忽略
+    } else {
+      // 创建新的employee
+      await Employee.create({
+        candidateId: candidate.id,
+        businessLineId: interview.businessLineId,
+        entryDate: offerRoundData.entryDate,
+        updatedBy: operatorId
+      });
+      console.log(`创建新 Employee 候选人ID: ${candidate.id}`);
+    }
+  } else if (offerRoundData.currentStatus === 'failed') {
+    // 如果选择不接受，删除对应的employee记录（仅当状态为待入职时）
+    if (employee && currentStage === 'pending_onboarding') {
+      await employee.destroy();
+      console.log(`删除 Employee ${employee.id}（候选人ID: ${candidate.id}）`);
+    }
+  }
 };
 
 // Helper function to transform interview data
-const transformInterview = (interview) => {
-  const candidate = interview.candidateProductLine?.Candidate;
-  const productLine = interview.candidateProductLine?.ProductLine;
-  const recommendDate = interview.candidateProductLine?.recommendDate;
-  const candidateProductLineId = interview.candidateProductLine?.id;
-  const productLineId = interview.candidateProductLine?.productLineId;
+const transformInterview = (interview, employee = null, currentStage = null) => {
+  const baseData = interview.toJSON();
+  
+  const candidate = baseData.Candidate;
+  const businessLine = baseData.BusinessLine;
+  const businessLineId = businessLine ? businessLine.id : (baseData.businessLineId || null);
 
-  const rounds = interview.rounds || [];
+  const rounds = baseData.rounds || [];
   const roundsMap = {};
   rounds.forEach(round => {
     roundsMap[round.stageCode] = round;
+    
+    if (round.stageCode === 'offer' && employee) {
+      if (employee.entryDate) {
+        round.entryDate = employee.entryDate;
+      }
+      round.currentStatus = 'passed';
+    }
   });
 
   return {
-    ...interview.toJSON(),
-    Candidate: candidate,
-    productLine: productLine,
-    productLineId: productLineId,
-    candidateProductLineId: candidateProductLineId,
-    recommendDate: recommendDate,
-    clientOwner: productLine?.clientOwner || '',
+    ...baseData,
+    businessLineId: businessLineId,
     rounds: rounds,
-    roundsMap: roundsMap
+    roundsMap: roundsMap,
+    currentStage: currentStage,
+    employeeEntryDate: employee ? employee.entryDate : null,
+    employeeLeaveDate: employee ? employee.leaveDate : null
   };
 };
 
 // Get all interviews
-router.get('/', async (req, res, next) => {
+router.get('/', authenticate, async (req, res, next) => {
   try {
     const { page = 1, pageSize = 20, currentStage, name, stages, passStatus } = req.query;
     
@@ -104,65 +191,97 @@ router.get('/', async (req, res, next) => {
       }
     }
     
-    const whereClause = {
-      currentStage: {
-        [require('sequelize').Op.in]: availableStages
+    const whereClause = {};
+    
+    if (passStatus) {
+      if (passStatus === 'progressing') {
+        whereClause.currentStatus = {
+          [require('sequelize').Op.in]: ['progressing', 'pending']
+        };
+      } else {
+        whereClause.currentStatus = passStatus;
       }
-    };
-    if (currentStage) {
-      whereClause.currentStage = currentStage;
     }
     
+    const include = [
+      {
+        model: Candidate,
+        as: 'Candidate',
+        include: [
+          {
+            model: CandidateStage,
+            as: 'CandidateStage',
+            where: stages ? {
+              currentStage: {
+                [require('sequelize').Op.in]: availableStages
+              }
+            } : undefined,
+            required: !!stages
+          }
+        ]
+      },
+      {
+        model: BusinessLine,
+        as: 'BusinessLine'
+      },
+      {
+        model: InterviewRound,
+        as: 'rounds'
+      }
+    ];
+    
+    // Add name filter to Candidate include
+    if (name) {
+      if (!include[0].where) {
+        include[0].where = {};
+      }
+      include[0].where.name = {
+        [require('sequelize').Op.like]: `%${name}%`
+      };
+      include[0].required = true;
+    }
+    
+    // First pass: get all matching interviews without pagination for total count
+    const allInterviews = await Interview.findAll({
+      attributes: ['id'],
+      where: whereClause,
+      include: include
+    });
+    
+    const totalCount = allInterviews.length;
+    
+    // Second pass: get paginated results
     const limit = parseInt(pageSize);
     const offset = (parseInt(page) - 1) * limit;
     
-    const { count, rows } = await Interview.findAndCountAll({
-      attributes: ['id', 'candidateProductLineId', 'currentStage', 'finalStatus', 'createdAt', 'updatedAt'],
+    const rows = await Interview.findAll({
+      attributes: ['id', 'candidateId', 'businessLineId', 'currentStatus', 'createdAt', 'updatedAt'],
       where: whereClause,
-      include: [
-        {
-          model: CandidateProductLine,
-          as: 'candidateProductLine',
-          include: ['Candidate', 'ProductLine']
-        },
-        {
-          model: InterviewRound,
-          as: 'rounds'
-        }
-      ],
+      include: include,
       order: [['id', 'DESC']],
       limit,
       offset
     });
     
-    let transformedInterviews = rows.map(transformInterview).filter(i => i.Candidate && i.productLine);
+    let transformedInterviews = await Promise.all(rows.map(async (interview) => {
+      const candidate = interview.Candidate;
+      if (!candidate) return null;
+      const candidateId = candidate.id;
+      const employee = await Employee.findOne({ where: { candidateId: candidateId } });
+      const candidateStage = await StageService.getStage(candidateId);
+      const currentStage = candidateStage ? candidateStage.currentStage : null;
+      return transformInterview(interview, employee, currentStage);
+    }));
+    transformedInterviews = transformedInterviews.filter(i => i);
     
-    // Apply name filter if provided
-    if (name) {
-      const nameLower = name.toLowerCase();
-      transformedInterviews = transformedInterviews.filter(interview => 
-        interview.Candidate && interview.Candidate.name && 
-        interview.Candidate.name.toLowerCase().includes(nameLower)
-      );
-    }
-    
-    // Apply passStatus filter if provided
-    if (passStatus === 'fail') {
-      transformedInterviews = transformedInterviews.filter(interview => 
-        interview.rounds && interview.rounds.some(round => round.passed === false)
-      );
-    } else if (passStatus === 'pass') {
-      transformedInterviews = transformedInterviews.filter(interview => 
-        !interview.rounds || !interview.rounds.some(round => round.passed === false)
-      );
-    }
+    // passStatus filter is now applied at database level in whereClause
     
     res.json({
       interviews: transformedInterviews,
       pagination: {
         page: parseInt(page),
         pageSize: parseInt(pageSize),
-        total: count
+        total: totalCount
       }
     });
   } catch (error) {
@@ -171,39 +290,40 @@ router.get('/', async (req, res, next) => {
 });
 
 // Create or update interview with rounds
-router.post('/', async (req, res, next) => {
+router.post('/', authenticate, async (req, res, next) => {
   try {
-    const { candidateId, productLineId, recommendDate, rounds, currentStage, finalStatus } = req.body;
+    const { candidateId, businessLineId, rounds, currentStage, currentStatus } = req.body;
     
-    let candidateProductLine = await CandidateProductLine.findOne({
-      where: { candidateId, productLineId }
+    if (!candidateId) {
+      return res.status(400).json({ error: 'candidateId is required' });
+    }
+    
+    // 检查该候选人是否已有面试记录（通过 UNIQUE 约束自动保证）
+    const existingInterview = await Interview.findOne({
+      where: { candidateId }
     });
     
-    if (!candidateProductLine) {
-      candidateProductLine = await CandidateProductLine.create({
-        candidateId,
-        productLineId,
-        recommendDate
+    let interview;
+    if (existingInterview) {
+      // 更新现有面试
+      interview = await existingInterview.update({
+        businessLineId: businessLineId !== undefined ? businessLineId : existingInterview.businessLineId
       });
     } else {
-      await candidateProductLine.update({ recommendDate });
-    }
-    
-    const [interview, created] = await Interview.findOrCreate({
-      where: { candidateProductLineId: candidateProductLine.id },
-      defaults: {
-        currentStage: currentStage || 'recommend_interview',
-        finalStatus: finalStatus || 'pending'
-      }
-    });
-    
-    if (!created) {
-      await interview.update({
-        currentStage: currentStage || interview.currentStage,
-        finalStatus: finalStatus || interview.finalStatus
+      // 创建新面试
+      interview = await Interview.create({
+        candidateId,
+        businessLineId,
+        currentStatus: 'progressing'
       });
     }
     
+    // 更新候选人阶段
+    if (currentStage) {
+      await StageService.updateStage(candidateId, currentStage, req.user?.id);
+    }
+    
+    // 先更新所有的 rounds
     if (rounds && Array.isArray(rounds)) {
       for (const roundData of rounds) {
         const [round, roundCreated] = await InterviewRound.findOrCreate({
@@ -212,34 +332,42 @@ router.post('/', async (req, res, next) => {
             stageCode: roundData.stageCode
           },
           defaults: {
-            stageIndex: INTERVIEW_STAGES.indexOf(roundData.stageCode),
-            scheduledDate: roundData.scheduledDate,
-            interviewer: roundData.interviewer,
-            content: roundData.content,
-            passed: roundData.passed,
-            completedAt: roundData.completedAt
-          }
-        });
-        
-        if (!roundCreated) {
-          await round.update({
-            scheduledDate: roundData.scheduledDate,
-            interviewer: roundData.interviewer,
-            content: roundData.content,
-            passed: roundData.passed,
-            completedAt: roundData.completedAt
+              stageIndex: INTERVIEW_STAGES.indexOf(roundData.stageCode),
+              scheduledDate: roundData.scheduledDate,
+              content: roundData.content,
+              currentStatus: roundData.currentStatus,
+              feedbackDate: roundData.feedbackDate,
+              completedAt: roundData.completedAt,
+              entryDate: roundData.entryDate
+            }
           });
-        }
+          
+          if (!roundCreated) {
+            await round.update({
+              scheduledDate: roundData.scheduledDate,
+              content: roundData.content,
+              currentStatus: roundData.currentStatus,
+              feedbackDate: roundData.feedbackDate,
+              completedAt: roundData.completedAt,
+              entryDate: roundData.entryDate
+            });
+          }
       }
     }
     
+    // 使用 updateInterviewStatus 函数来智能更新面试状态
+    await updateInterviewStatus(interview.id);
+
     const updatedInterview = await Interview.findByPk(interview.id, {
-      attributes: ['id', 'candidateProductLineId', 'currentStage', 'finalStatus', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'candidateId', 'businessLineId', 'currentStatus', 'createdAt', 'updatedAt'],
       include: [
         {
-          model: CandidateProductLine,
-          as: 'candidateProductLine',
-          include: ['Candidate', 'ProductLine']
+          model: Candidate,
+          as: 'Candidate'
+        },
+        {
+          model: BusinessLine,
+          as: 'BusinessLine'
         },
         {
           model: InterviewRound,
@@ -248,82 +376,117 @@ router.post('/', async (req, res, next) => {
       ]
     });
 
-    await syncCandidateStage(candidateId);
+    const candidateStage = await StageService.getStage(candidateId);
+    if (candidateStage) {
+      await StageService.updateStage(candidateId, candidateStage.currentStage, req.user?.id);
+    }
     
-    res.json(transformInterview(updatedInterview));
+    if (rounds && Array.isArray(rounds)) {
+      await syncEmployeeOnOffer(interview.id, rounds, req.user?.id);
+    }
+    
+    const dbCurrentStage = candidateStage ? candidateStage.currentStage : null;
+    const employee = candidateId ? await Employee.findOne({ where: { candidateId: candidateId } }) : null;
+    
+    res.json(transformInterview(updatedInterview, employee, dbCurrentStage));
   } catch (error) {
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.status(400).json({ error: '该候选人已有面试记录，不能重复创建' });
+    }
     next(error);
   }
 });
 
 // Update interview with rounds
-router.put('/:id', async (req, res, next) => {
+router.put('/:id', authenticate, async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { candidateId, productLineId, recommendDate, rounds, currentStage, finalStatus } = req.body;
+    const { candidateId, businessLineId, rounds, currentStage, currentStatus } = req.body;
+
+    console.log('=== Interview Update Request ===');
+    console.log('interviewId:', id);
+    console.log('rounds:', JSON.stringify(rounds, null, 2));
 
     const interview = await Interview.findByPk(id);
     if (!interview) {
       return res.status(404).json({ error: 'Interview not found' });
     }
 
-    let finalStatusToSet = interview.finalStatus;
+    // 保存更新前的状态，用于后续判断是否需要同步候选人阶段
+    const oldFinalStatus = interview.currentStatus;
 
-    if (interview.finalStatus !== 'failed' && interview.finalStatus !== 'passed') {
-      if (rounds && Array.isArray(rounds)) {
-        let hasFailed = false;
-
-        for (const roundData of rounds) {
-          const [round, roundCreated] = await InterviewRound.findOrCreate({
-            where: {
-              interviewId: interview.id,
-              stageCode: roundData.stageCode
-            },
-            defaults: {
-              stageIndex: INTERVIEW_STAGES.indexOf(roundData.stageCode),
-              scheduledDate: roundData.scheduledDate,
-              interviewer: roundData.interviewer,
-              content: roundData.content,
-              passed: roundData.passed,
-              completedAt: roundData.completedAt
-            }
-          });
-
-          if (!roundCreated) {
-            await round.update({
-              scheduledDate: roundData.scheduledDate,
-              interviewer: roundData.interviewer,
-              content: roundData.content,
-              passed: roundData.passed,
-              completedAt: roundData.completedAt
-            });
+    // 先更新所有的 rounds
+    if (rounds && Array.isArray(rounds)) {
+      for (const roundData of rounds) {
+        console.log(`Processing round: ${roundData.stageCode}, currentStatus: ${roundData.currentStatus}`);
+        
+        const [round, roundCreated] = await InterviewRound.findOrCreate({
+          where: {
+            interviewId: interview.id,
+            stageCode: roundData.stageCode
+          },
+          defaults: {
+            stageIndex: INTERVIEW_STAGES.indexOf(roundData.stageCode),
+            scheduledDate: roundData.scheduledDate,
+            content: roundData.content,
+            currentStatus: roundData.currentStatus,
+            feedbackDate: roundData.feedbackDate,
+            completedAt: roundData.completedAt,
+            entryDate: roundData.entryDate
           }
+        });
 
-          const passedValue = roundData.passed;
-          if (passedValue === false || passedValue === 0) {
-            hasFailed = true;
+        if (!roundCreated) {
+          console.log(`Updating existing round: ${roundData.stageCode}`);
+          const updateData = {};
+          if (roundData.scheduledDate !== undefined && roundData.scheduledDate !== null) {
+            updateData.scheduledDate = roundData.scheduledDate;
           }
-        }
-
-        if (hasFailed) {
-          finalStatusToSet = 'failed';
+          if (roundData.content !== undefined && roundData.content !== null) {
+            updateData.content = roundData.content;
+          }
+          if (roundData.currentStatus !== undefined && roundData.currentStatus !== null) {
+            updateData.currentStatus = roundData.currentStatus;
+          }
+          if (roundData.feedbackDate !== undefined && roundData.feedbackDate !== null) {
+            updateData.feedbackDate = roundData.feedbackDate;
+          }
+          if (roundData.completedAt !== undefined && roundData.completedAt !== null) {
+            updateData.completedAt = roundData.completedAt;
+          }
+          if (roundData.entryDate !== undefined && roundData.entryDate !== null) {
+            updateData.entryDate = roundData.entryDate;
+          }
+          if (Object.keys(updateData).length > 0) {
+            await round.update(updateData);
+          }
         }
       }
     }
 
-    const oldFinalStatus = interview.finalStatus;
+    // 更新 Interview 基本信息
     await interview.update({
-      currentStage: currentStage || interview.currentStage,
-      finalStatus: finalStatusToSet
+      businessLineId: businessLineId !== undefined ? businessLineId : interview.businessLineId
     });
+    
+    // 更新候选人阶段
+    if (currentStage) {
+      await StageService.updateStage(interview.candidateId, currentStage, req.user?.id);
+    }
+    
+    // 使用 updateInterviewStatus 函数来智能更新面试状态
+    await updateInterviewStatus(interview.id);
 
     const updatedInterview = await Interview.findByPk(interview.id, {
-      attributes: ['id', 'candidateProductLineId', 'currentStage', 'finalStatus', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'candidateId', 'businessLineId', 'currentStatus', 'createdAt', 'updatedAt'],
       include: [
         {
-          model: CandidateProductLine,
-          as: 'candidateProductLine',
-          include: ['Candidate', 'ProductLine']
+          model: Candidate,
+          as: 'Candidate'
+        },
+        {
+          model: BusinessLine,
+          as: 'BusinessLine'
         },
         {
           model: InterviewRound,
@@ -332,12 +495,22 @@ router.put('/:id', async (req, res, next) => {
       ]
     });
 
-    // 当finalStatus发生变化时（比如变成failed或passed），需要同步候选人阶段
-    if (oldFinalStatus !== finalStatusToSet) {
-      await syncCandidateStage(updatedInterview.candidateProductLine.candidateId);
+    // 获取候选人阶段
+    const candidateStage = await StageService.getStage(interview.candidateId);
+    
+    // 当currentStatus发生变化时（比如变成failed或passed），需要同步候选人阶段
+    if (oldFinalStatus !== updatedInterview.currentStatus && candidateStage) {
+      await StageService.updateStage(interview.candidateId, candidateStage.currentStage, req.user?.id);
     }
 
-    res.json(transformInterview(updatedInterview));
+    if (rounds && Array.isArray(rounds)) {
+      await syncEmployeeOnOffer(interview.id, rounds, req.user?.id);
+    }
+
+    const dbCurrentStage = candidateStage ? candidateStage.currentStage : null;
+    const employee = candidateId ? await Employee.findOne({ where: { candidateId: candidateId } }) : null;
+    
+    res.json(transformInterview(updatedInterview, employee, dbCurrentStage));
   } catch (error) {
     next(error);
   }
@@ -347,27 +520,18 @@ router.put('/:id', async (req, res, next) => {
 router.get('/candidate/:candidateId', async (req, res, next) => {
   try {
     const { candidateId } = req.params;
-    const { productLineId } = req.query;
     
-    const where = { candidateId };
-    if (productLineId) {
-      where.productLineId = productLineId;
-    }
-    
-    const candidateProductLines = await CandidateProductLine.findAll({
-      where,
-      include: ['Candidate', 'ProductLine']
-    });
-    
-    const candidateProductLineIds = candidateProductLines.map(cpl => cpl.id);
     const interviews = await Interview.findAll({
-      attributes: ['id', 'candidateProductLineId', 'currentStage', 'finalStatus', 'createdAt', 'updatedAt'],
-      where: { candidateProductLineId: candidateProductLineIds },
+      attributes: ['id', 'candidateId', 'businessLineId', 'currentStatus', 'createdAt', 'updatedAt'],
+      where: { candidateId },
       include: [
         {
-          model: CandidateProductLine,
-          as: 'candidateProductLine',
-          include: ['Candidate', 'ProductLine']
+          model: Candidate,
+          as: 'Candidate'
+        },
+        {
+          model: BusinessLine,
+          as: 'BusinessLine'
         },
         {
           model: InterviewRound,
@@ -377,9 +541,16 @@ router.get('/candidate/:candidateId', async (req, res, next) => {
       order: [['id', 'DESC']]
     });
     
-    const transformedInterviews = interviews.map(transformInterview).filter(i => i.Candidate && i.productLine);
+    const transformedInterviews = await Promise.all(interviews.map(async (interview) => {
+      const candidate = interview.Candidate;
+      if (!candidate) return null;
+      const candidateStage = await StageService.getStage(candidate.id);
+      const currentStage = candidateStage ? candidateStage.currentStage : null;
+      return transformInterview(interview, null, currentStage);
+    }));
+    const filteredInterviews = transformedInterviews.filter(i => i);
     
-    res.json({ interviews: transformedInterviews });
+    res.json({ interviews: filteredInterviews });
   } catch (error) {
     next(error);
   }
@@ -388,16 +559,16 @@ router.get('/candidate/:candidateId', async (req, res, next) => {
 // Create or update a single interview round
 router.post('/rounds', async (req, res, next) => {
   try {
-    const { interviewId, stageCode, stageIndex, scheduledDate, interviewer, content, passed, completedAt } = req.body;
+    const { interviewId, stageCode, stageIndex, scheduledDate, content, currentStatus, feedbackDate, completedAt } = req.body;
     
     const [round, created] = await InterviewRound.findOrCreate({
       where: { interviewId, stageCode },
       defaults: {
         stageIndex: stageIndex !== undefined ? stageIndex : INTERVIEW_STAGES.indexOf(stageCode),
         scheduledDate,
-        interviewer,
         content,
-        passed,
+        currentStatus,
+        feedbackDate,
         completedAt
       }
     });
@@ -405,12 +576,15 @@ router.post('/rounds', async (req, res, next) => {
     if (!created) {
       await round.update({
         scheduledDate,
-        interviewer,
         content,
-        passed,
+        currentStatus,
+        feedbackDate,
         completedAt
       });
     }
+    
+    // 更新面试状态
+    await updateInterviewStatus(interviewId);
     
     res.json(round);
   } catch (error) {
@@ -419,10 +593,10 @@ router.post('/rounds', async (req, res, next) => {
 });
 
 // Update an interview round by ID
-router.put('/rounds/:id', async (req, res, next) => {
+router.put('/rounds/:id', authenticate, async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { scheduledDate, interviewer, content, passed, completedAt } = req.body;
+    const { scheduledDate, content, currentStatus, feedbackDate, completedAt } = req.body;
     
     const round = await InterviewRound.findByPk(id);
     if (!round) {
@@ -431,11 +605,14 @@ router.put('/rounds/:id', async (req, res, next) => {
     
     await round.update({
       scheduledDate,
-      interviewer,
       content,
-      passed,
+      currentStatus,
+      feedbackDate,
       completedAt
     });
+    
+    // 更新面试状态
+    await updateInterviewStatus(round.interviewId);
     
     res.json(round);
   } catch (error) {
@@ -447,12 +624,12 @@ router.put('/rounds/:id', async (req, res, next) => {
 router.post('/advance/:interviewId', async (req, res, next) => {
   try {
     const { interviewId } = req.params;
+    const { currentStageData } = req.body;
     
     const interview = await Interview.findByPk(interviewId, {
-      attributes: ['id', 'candidateProductLineId', 'currentStage', 'finalStatus', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'candidateId', 'businessLineId', 'currentStatus', 'createdAt', 'updatedAt'],
       include: [
-        { model: InterviewRound, as: 'rounds' },
-        { model: CandidateProductLine, as: 'candidateProductLine' }
+        { model: InterviewRound, as: 'rounds' }
       ]
     });
     
@@ -460,87 +637,116 @@ router.post('/advance/:interviewId', async (req, res, next) => {
       return res.status(404).json({ error: 'Interview not found' });
     }
     
-    const currentIndex = INTERVIEW_STAGES.indexOf(interview.currentStage);
-    const originalCurrentStage = interview.currentStage;
+    // 如果面试状态为失败，不能推进
+    if (interview.currentStatus === 'failed') {
+      return res.status(400).json({ error: '面试已失败，不能推进' });
+    }
+    
+    // 从 CandidateStage 获取当前阶段
+    const candidateStage = await StageService.getStage(interview.candidateId);
+    const currentStageFromDb = candidateStage ? candidateStage.currentStage : 'recommend_interview';
+    
+    const currentIndex = INTERVIEW_STAGES.indexOf(currentStageFromDb);
+    const originalCurrentStage = currentStageFromDb;
     let nextStage;
     
     if (currentIndex < INTERVIEW_STAGES.length - 1) {
       nextStage = INTERVIEW_STAGES[currentIndex + 1];
-      await interview.update({ currentStage: nextStage });
+      
+      if (currentStageData && originalCurrentStage) {
+        const [currentRound, created] = await InterviewRound.findOrCreate({
+          where: {
+            interviewId: interview.id,
+            stageCode: originalCurrentStage
+          },
+          defaults: {
+            stageIndex: currentIndex,
+            scheduledDate: currentStageData.scheduledDate,
+            content: currentStageData.content,
+            currentStatus: currentStageData.currentStatus,
+            feedbackDate: currentStageData.feedbackDate
+          }
+        });
+        
+        // 如果记录已存在，只更新非空字段
+        if (!created) {
+          const updateData = {};
+          if (currentStageData.scheduledDate !== undefined) {
+            updateData.scheduledDate = currentStageData.scheduledDate;
+          }
+          if (currentStageData.content !== undefined) {
+            updateData.content = currentStageData.content;
+          }
+          if (currentStageData.currentStatus !== undefined) {
+            updateData.currentStatus = currentStageData.currentStatus;
+          }
+          if (currentStageData.feedbackDate !== undefined) {
+            updateData.feedbackDate = currentStageData.feedbackDate;
+          }
+          if (Object.keys(updateData).length > 0) {
+            await currentRound.update(updateData);
+          }
+        }
+      }
+      
+      // 更新候选人阶段
+      await StageService.updateStage(interview.candidateId, nextStage, req.user?.id);
 
-      await InterviewRound.findOrCreate({
+      // 注意：不再为下一阶段自动创建或初始化记录
+      // 用户需要在编辑时自己填写 scheduledDate 和 currentStatus
+      // 仅在记录完全不存在时创建空记录（不含默认值）
+      const [nextRound] = await InterviewRound.findOrCreate({
         where: {
           interviewId: interview.id,
           stageCode: nextStage
         },
         defaults: {
           stageIndex: currentIndex + 1
+          // 不设置 scheduledDate 和 currentStatus，让用户自己填写
         }
       });
 
-      if (interview.candidateProductLine) {
-        await interview.candidateProductLine.update({ interviewStage: nextStage });
-      }
-
       // 如果是从offer推进到pending_onboarding
       if (originalCurrentStage === 'offer') {
-        await interview.update({ finalStatus: 'passed' });
-
-        if (interview.candidateProductLine) {
-          const candidate = await Candidate.findByPk(interview.candidateProductLine.candidateId);
-          if (candidate) {
-            await Employee.findOrCreate({
-              where: {
-                candidateId: candidate.id,
-                productLineId: interview.candidateProductLine.productLineId
-              },
-              defaults: {
-                name: candidate.name,
-                email: candidate.email,
-                phone: candidate.phone,
-                gender: candidate.gender,
-                idCard: candidate.idCard,
-                lastOperatorId: candidate.lastOperatorId,
-                currentStage: 'pending_onboarding'
-              }
-            });
-          }
+        const candidate = await Candidate.findByPk(interview.candidateId);
+        if (candidate) {
+          await Employee.findOrCreate({
+            where: {
+              candidateId: candidate.id,
+              businessLineId: interview.businessLineId
+            },
+            defaults: {}
+          });
         }
       }
     } else {
-      await interview.update({ finalStatus: 'passed' });
-
-      if (interview.candidateProductLine) {
-        await interview.candidateProductLine.update({ interviewStage: 'offer' });
-
-        const candidate = await Candidate.findByPk(interview.candidateProductLine.candidateId);
-        if (candidate) {
-          const [employee, created] = await Employee.findOrCreate({
-            where: { idCard: candidate.idCard },
-            defaults: {
-              name: candidate.name,
-              email: candidate.email,
-              phone: candidate.phone,
-              gender: candidate.gender,
-              idCard: candidate.idCard,
-              lastOperatorId: candidate.lastOperatorId,
-              currentStage: 'pending_onboarding'
-            }
-          });
-
-          if (created) {
+      const candidate = await Candidate.findByPk(interview.candidateId);
+      if (candidate) {
+        const [employee, created] = await Employee.findOrCreate({
+          where: { candidateId: candidate.id },
+          defaults: {
+            businessLineId: interview.businessLineId
           }
-        }
+        });
       }
     }
     
+    // 更新面试状态
+    await updateInterviewStatus(interview.id);
+    
+    // 同步候选人阶段（必须在 updateInterviewStatus 之后调用）
+    await StageService.updateStage(interview.candidateId, nextStage, req.user?.id);
+    
     const updatedInterview = await Interview.findByPk(interview.id, {
-      attributes: ['id', 'candidateProductLineId', 'currentStage', 'finalStatus', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'candidateId', 'businessLineId', 'currentStatus', 'createdAt', 'updatedAt'],
       include: [
         {
-          model: CandidateProductLine,
-          as: 'candidateProductLine',
-          include: ['Candidate', 'ProductLine']
+          model: Candidate,
+          as: 'Candidate'
+        },
+        {
+          model: BusinessLine,
+          as: 'BusinessLine'
         },
         {
           model: InterviewRound,
@@ -548,13 +754,36 @@ router.post('/advance/:interviewId', async (req, res, next) => {
         }
       ]
     });
-
-    await syncCandidateStage(updatedInterview.candidateProductLine.candidateId);
     
-    res.json(transformInterview(updatedInterview));
+    const latestStage = await StageService.getStage(interview.candidateId);
+    const dbCurrentStage = latestStage ? latestStage.currentStage : null;
+    res.json(transformInterview(updatedInterview, null, dbCurrentStage));
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Delete interview
+router.delete('/:id', authenticate, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    
+    const interview = await Interview.findByPk(id);
+    if (!interview) {
+      return res.status(404).json({ error: 'Interview not found' });
+    }
+    
+    // 删除关联的面试轮次记录
+    await InterviewRound.destroy({ where: { interviewId: id } });
+    
+    // 删除面试记录
+    await interview.destroy();
+    
+    res.json({ message: 'Interview deleted successfully' });
   } catch (error) {
     next(error);
   }
 });
 
 module.exports = router;
+

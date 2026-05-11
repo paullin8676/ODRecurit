@@ -22,7 +22,7 @@
       </el-form>
 
       <el-table :data="employees" v-loading="loading" stripe>
-        <el-table-column prop="name" label="姓名" width="100">
+        <el-table-column prop="name" label="姓名" width="100" fixed="left">
           <template #default="{ row }">
             {{ row.name }}
           </template>
@@ -54,9 +54,9 @@
         </el-table-column>
         <el-table-column label="产品线" width="150" show-overflow-tooltip>
           <template #default="{ row }">
-            <template v-if="row.productLine && row.productLine.name">
+            <template v-if="row.businessLine && row.businessLine.name">
               <el-tag type="info" class="product-line-tag">
-                {{ row.productLine.name }}
+                {{ row.businessLine.name }}
               </el-tag>
             </template>
             <template v-else>
@@ -205,7 +205,7 @@
           <el-input :value="filteredStageNames[viewForm.currentStage] || '-'" disabled />
         </el-form-item>
         <el-form-item label="产品线">
-          <el-input :value="viewForm.productLineName || '-'" disabled />
+          <el-input :value="viewForm.businessLineName || '-'" disabled />
         </el-form-item>
         <el-form-item label="入职日期">
           <el-input :value="viewForm.entryDate ? formatDate(viewForm.entryDate) : '-'" disabled />
@@ -290,7 +290,7 @@ const viewForm = reactive({
   email: '',
   idCard: '',
   currentStage: '',
-  productLineName: '',
+  businessLineName: '',
   entryDate: null,
   leaveDate: null,
   leaveType: '',
@@ -423,7 +423,7 @@ const handleView = (row) => {
     email: row.email || '',
     idCard: row.idCard || '',
     currentStage: row.currentStage || '',
-    productLineName: row.productLine?.name || '',
+    businessLineName: row.businessLine?.name || '',
     entryDate: row.entryDate || null,
     leaveDate: row.leaveDate || null,
     leaveType: row.leaveType || '',
@@ -442,7 +442,7 @@ const handleViewDialogClose = () => {
     email: '',
     idCard: '',
     currentStage: '',
-    productLineName: '',
+    businessLineName: '',
     entryDate: null,
     leaveDate: null,
     leaveType: '',
@@ -493,7 +493,7 @@ const handleSubmit = async () => {
       email: form.email,
       idCard: form.idCard,
       currentStage: form.currentStage,
-      entryDate: form.currentStage !== 'leave' ? form.entryDate : null,
+      entryDate: form.entryDate,
       entryRemark: '',
       leaveDate: form.currentStage === 'leave' ? form.leaveDate : null,
       leaveType: form.currentStage === 'leave' ? form.leaveType : '',

@@ -1,35 +1,30 @@
 <template>
   <div class="page-container">
     <div class="page-header">
-      <h2 class="page-title">产品线配置</h2>
+      <h2 class="page-title">业务线配置</h2>
       <el-button type="primary" @click="handleCreate" v-if="authStore.isManager">
         <el-icon><Plus /></el-icon>
-        新增产品线
+        新增业务线
       </el-button>
     </div>
 
     <div class="card-container">
-      <el-table :data="productLines" v-loading="loading" stripe>
+      <el-table :data="businessLines" v-loading="loading" stripe>
         <el-table-column prop="name" label="名称" width="200" />
-        <el-table-column prop="clientOwner" label="客户负责人" width="150" />
-        <el-table-column prop="consultant" label="负责人员" width="200">
-          <template #default="{ row }">
-            <template v-if="Array.isArray(row.consultants) && row.consultants.length > 0">
-              <el-tag v-for="(consultant, index) in row.consultants" :key="consultant.id" size="small" style="margin-right: 4px; margin-bottom: 4px">
-                {{ consultant.realName || consultant.username }}
-              </el-tag>
-            </template>
-            <template v-else>
-              -
-            </template>
-          </template>
-        </el-table-column>
         <el-table-column prop="description" label="描述" />
         <el-table-column prop="isActive" label="状态" width="80">
           <template #default="{ row }">
             <el-tag :type="row.isActive ? 'success' : 'info'" size="small">
               {{ row.isActive ? '启用' : '禁用' }}
             </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="可编辑用户" width="200">
+          <template #default="{ row }">
+            <span v-if="row.canEdit && row.canEdit.length > 0">
+              {{ getEditUsersDisplay(row.canEdit) }}
+            </span>
+            <span v-else>-</span>
           </template>
         </el-table-column>
         <el-table-column label="操作" fixed="right" width="200" v-if="authStore.isManager">
@@ -42,16 +37,21 @@
       </el-table>
     </div>
 
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500px" @close="handleDialogClose">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="600px" @close="handleDialogClose">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="120px">
         <el-form-item label="名称" prop="name">
           <el-input v-model="form.name" />
         </el-form-item>
-        <el-form-item label="客户负责人" prop="clientOwner">
-          <el-input v-model="form.clientOwner" />
+        <el-form-item label="描述" prop="description">
+          <el-input v-model="form.description" type="textarea" :rows="3" />
         </el-form-item>
-        <el-form-item label="负责人员" prop="consultantIds">
-          <el-select v-model="form.consultantIds" multiple placeholder="请选择负责人员" style="width: 100%">
+        <el-form-item label="可编辑用户">
+          <el-select
+            v-model="form.canEdit"
+            multiple
+            placeholder="请选择可编辑业务线的用户"
+            style="width: 100%"
+          >
             <el-option
               v-for="user in users"
               :key="user.id"
@@ -59,9 +59,9 @@
               :value="user.id"
             />
           </el-select>
-        </el-form-item>
-        <el-form-item label="描述" prop="description">
-          <el-input v-model="form.description" type="textarea" :rows="3" />
+          <div style="margin-top: 8px; color: #909399; font-size: 12px;">
+            选中的用户可以在面试阶段编辑候选人的业务线
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -74,18 +74,18 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { productLineApi, userApi } from '../api'
+import { businessLineApi, userApi } from '../api'
 import { useAuthStore } from '../stores/auth'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 
 const authStore = useAuthStore()
 
-const productLines = ref([])
+const businessLines = ref([])
 const users = ref([])
 const loading = ref(false)
 const dialogVisible = ref(false)
-const dialogTitle = ref('新增产品线')
+const dialogTitle = ref('新增业务线')
 const submitLoading = ref(false)
 const formRef = ref()
 const currentId = ref(null)
@@ -93,22 +93,21 @@ const isEdit = ref(false)
 
 const form = reactive({
   name: '',
-  clientOwner: '',
-  consultantIds: [],
-  description: ''
+  description: '',
+  canEdit: []
 })
 
 const rules = {
   name: [{ required: true, message: '请输入名称', trigger: 'blur' }]
 }
 
-const fetchProductLines = async () => {
+const fetchBusinessLines = async () => {
   loading.value = true
   try {
-    const data = await productLineApi.getAll()
-    productLines.value = data.productLines
+    const data = await businessLineApi.getAll()
+    businessLines.value = data.businessLines
   } catch (error) {
-    ElMessage.error('获取产品线列表失败')
+    ElMessage.error('获取业务线列表失败')
   } finally {
     loading.value = false
   }
@@ -116,40 +115,51 @@ const fetchProductLines = async () => {
 
 const fetchUsers = async () => {
   try {
-    const data = await userApi.getAll()
-    users.value = data.users
+    const data = await userApi.getAll({})
+    users.value = data.users || []
   } catch (error) {
+    users.value = []
   }
 }
 
+const getEditUsersDisplay = (canEdit) => {
+  if (!canEdit || !Array.isArray(canEdit)) return '-'
+  const editUsers = users.value.filter(u => canEdit.includes(u.id))
+  return editUsers.map(u => u.realName || u.username).join('、')
+}
+
 const handleCreate = () => {
-  dialogTitle.value = '新增产品线'
+  dialogTitle.value = '新增业务线'
   isEdit.value = false
+  Object.assign(form, {
+    name: '',
+    description: '',
+    canEdit: []
+  })
   dialogVisible.value = true
 }
 
 const handleEdit = (row) => {
-  dialogTitle.value = '编辑产品线'
+  dialogTitle.value = '编辑业务线'
   isEdit.value = true
   currentId.value = row.id
   Object.assign(form, {
     name: row.name,
-    clientOwner: row.clientOwner,
-    consultantIds: row.consultants ? row.consultants.map(c => c.id) : [],
-    description: row.description
+    description: row.description,
+    canEdit: row.canEdit || []
   })
   dialogVisible.value = true
 }
 
 const handleDelete = async (row) => {
   try {
-    const response = await productLineApi.delete(row.id)
+    const response = await businessLineApi.delete(row.id)
     if (response.deleted) {
       ElMessage.success('删除成功')
     } else if (response.deactivated) {
       ElMessage.success('禁用成功')
     }
-    fetchProductLines()
+    fetchBusinessLines()
   } catch (error) {
     ElMessage.error(error.message || '操作失败')
   }
@@ -157,9 +167,9 @@ const handleDelete = async (row) => {
 
 const handleEnable = async (row) => {
   try {
-    await productLineApi.update(row.id, { isActive: true })
+    await businessLineApi.update(row.id, { isActive: true })
     ElMessage.success('启用成功')
-    fetchProductLines()
+    fetchBusinessLines()
   } catch (error) {
     ElMessage.error(error.message || '启用失败')
   }
@@ -171,15 +181,21 @@ const handleSubmit = async () => {
 
   submitLoading.value = true
   try {
+    const submitData = {
+      name: form.name,
+      description: form.description,
+      canEdit: form.canEdit
+    }
+
     if (isEdit.value) {
-      await productLineApi.update(currentId.value, form)
+      await businessLineApi.update(currentId.value, submitData)
       ElMessage.success('更新成功')
     } else {
-      await productLineApi.create(form)
+      await businessLineApi.create(submitData)
       ElMessage.success('创建成功')
     }
     dialogVisible.value = false
-    fetchProductLines()
+    fetchBusinessLines()
   } catch (error) {
     ElMessage.error(error.message || '操作失败')
   } finally {
@@ -191,14 +207,13 @@ const handleDialogClose = () => {
   formRef.value.resetFields()
   Object.assign(form, {
     name: '',
-    clientOwner: '',
-    consultantIds: [],
-    description: ''
+    description: '',
+    canEdit: []
   })
 }
 
 onMounted(() => {
-  fetchProductLines()
+  fetchBusinessLines()
   fetchUsers()
 })
 </script>

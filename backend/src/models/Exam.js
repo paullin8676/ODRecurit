@@ -11,7 +11,7 @@ const Exam = sequelize.define('Exam', {
     type: DataTypes.INTEGER,
     allowNull: false,
     references: {
-      model: 'Candidate',
+      model: 'candidate',
       key: 'id'
     },
     unique: true // 一个候选人只能有一条机考记录
@@ -20,7 +20,7 @@ const Exam = sequelize.define('Exam', {
     type: DataTypes.INTEGER,
     allowNull: true,
     references: {
-      model: 'ExamPaper',
+      model: 'exam_paper',
       key: 'id'
     }
   },
@@ -48,12 +48,13 @@ const Exam = sequelize.define('Exam', {
     type: DataTypes.INTEGER,
     allowNull: true
   },
-  examPassed: {
-    type: DataTypes.BOOLEAN,
-    allowNull: true
+  currentStatus: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue: 'pending'
   }
 }, {
-  tableName: 'Exam',
+  tableName: 'exam',
   timestamps: true,
   underscored: true
 });

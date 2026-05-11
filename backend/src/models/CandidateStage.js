@@ -1,7 +1,7 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
-const Employee = sequelize.define('Employee', {
+const CandidateStage = sequelize.define('CandidateStage', {
   id: {
     type: DataTypes.INTEGER,
     primaryKey: true,
@@ -9,40 +9,34 @@ const Employee = sequelize.define('Employee', {
   },
   candidateId: {
     type: DataTypes.INTEGER,
-    allowNull: true,
+    allowNull: false,
+    unique: true,
     references: {
       model: 'candidate',
       key: 'id'
     }
   },
-  businessLineId: {
+  consultantId: {
     type: DataTypes.INTEGER,
     allowNull: true,
     references: {
-      model: 'business_line',
+      model: 'user',
       key: 'id'
     }
   },
-  entryDate: {
-    type: DataTypes.DATE,
+  currentStage: {
+    type: DataTypes.STRING(50),
+    allowNull: false,
+    defaultValue: 'candidate_entry'
+  },
+  previousStage: {
+    type: DataTypes.STRING(50),
     allowNull: true
   },
-  entryRemark: {
+  stageHistory: {
     type: DataTypes.TEXT,
-    allowNull: true
-  },
-  leaveDate: {
-    type: DataTypes.DATE,
-    allowNull: true
-  },
-  leaveType: {
-    type: DataTypes.STRING(20),
-    allowNull: true,
-    comment: '主动离职(1) 或 被动离职(2)'
-  },
-  leaveRemark: {
-    type: DataTypes.TEXT,
-    allowNull: true
+    allowNull: false,
+    defaultValue: '[]'
   },
   updatedBy: {
     type: DataTypes.INTEGER,
@@ -53,9 +47,9 @@ const Employee = sequelize.define('Employee', {
     }
   }
 }, {
-  tableName: 'employee',
+  tableName: 'candidate_stage',
   timestamps: true,
   underscored: true
 });
 
-module.exports = Employee;
+module.exports = CandidateStage;
