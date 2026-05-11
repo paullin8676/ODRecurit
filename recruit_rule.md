@@ -1,6 +1,5 @@
-
 # 招聘管理系统业务规则
-> 版本: 1.8
+> 版本: 2.0
 > 日期: 2026-05-11
 
 ## 一、业务规则
@@ -92,7 +91,7 @@
 ### 1.5 顾问分配规则
 
 #### 1.5.1 顾问字段说明
-- `consultantId`：负责该候选人招聘全流程的顾问
+- `consultantId`：负责该候选人招聘全流程的顾问，存储在 CandidateStage 表中
 - 可为主管(manager)或顾问(consultant)角色
 - 系统管理员(admin)不参与统计
 
@@ -141,112 +140,144 @@
 用户操作 → API请求 → 路由处理 → 业务逻辑 → 数据库操作 → 返回响应 → 前端状态更新
 ```
 
-### 2.2 候选人数据流转
+### 2.2 核心表职责划分
+
+#### 2.2.1 CandidateStage（核心表）
+- **职责**：统一管理候选人全生命周期阶段
+- **关键字段**：
+  - candidateId：关联候选人
+  - consultantId：负责顾问
+  - currentStage：当前阶段
+  - previousStage：上一阶段
+  - stageHistory：阶段变更历史（JSON数组）
+  - updatedBy：最后更新人
+
+#### 2.2.2 Candidate
+- **职责**：仅存储候选人基本信息
+- **关键字段**：name, email, phone, gender, idCard
+
+#### 2.2.3 Employee
+- **职责**：仅存储员工特有信息（入职/离职相关）
+- **个人信息获取**：通过 candidateId 从 Candidate 表获取
+- **阶段信息获取**：通过 candidateId 从 CandidateStage 表获取
+
+#### 2.2.4 Interview
+- **职责**：仅存储面试记录基本信息
+- **阶段信息获取**：通过 candidateId 从 CandidateStage 表获取
+
+### 2.3 候选人数据流转
 
 ```mermaid
 flowchart LR
     A[候选录入] -->|CREATE| B[Candidate表]
-    B -->|关联| C[Exam表]
-    C -->|推进| D[Test表]
-    D -->|面推| E[Interview表]
-    E -->|创建| F[InterviewRound表]
-    F -->|推进到pending_onboarding| G[Employee表]
-    G -->|入职| H[更新employee.current_stage=entry]
-    H -->|离职| I[更新employee.current_stage=leave]
+    A -->|CREATE| C[CandidateStage表]
+    C -->|关联| B
+    B -->|关联| D[Exam表]
+    D -->|推进| E[Test表]
+    E -->|面推| F[Interview表]
+    F -->|创建| G[InterviewRound表]
+    G -->|推进到pending_onboarding| H[Employee表]
+    H -->|入职| I[更新CandidateStage.current_stage=entry]
+    I -->|离职| J[更新CandidateStage.current_stage=leave]
 ```
 
-### 2.3 阶段字段同步规则
+### 2.4 阶段字段同步规则
 
-#### 2.3.1 阶段字段位置
-| 字段 | 表名 | 说明 |
-|------|------|------|
-| currentStage | Candidate | 候选人全局阶段 |
-| currentStage | Employee | 员工阶段 |
-| currentStage | Interview | 面试记录阶段 |
+#### 2.4.1 单一数据源原则
+- **CandidateStage.currentStage** 是所有阶段的唯一数据源
+- Candidate、Employee、Interview 表不再存储阶段字段
+- 各模块需要阶段信息时，从 CandidateStage 表查询
 
-#### 2.3.2 更新规则
-1. 候选人推进时，同步更新：
-   - candidate.current_stage
-   - interview.current_stage
+#### 2.4.2 更新规则
+1. 候选人推进阶段时：
+   - 仅更新 CandidateStage.currentStage
+   - 记录变更到 CandidateStage.stageHistory
+   - 设置 CandidateStage.previousStage
+   - 更新 CandidateStage.updatedBy
 
-2. 员工管理页面修改阶段时，同步更新：
-   - employee.current_stage
-   - interview.current_stage
+2. 员工管理页面修改阶段时：
+   - 仅更新 CandidateStage.currentStage
+   - Employee 表不存储阶段信息
 
 3. 员工阶段变更为 entry/leave 时：
-   - 同步更新 candidate.current_stage
+   - 更新 CandidateStage.currentStage
+   - 同时更新 Employee 表的相关字段（entryDate/leaveDate等）
 
-### 2.4 API 请求流程
+### 2.5 API 请求流程
 
-#### 2.4.1 创建候选人流程
+#### 2.5.1 创建候选人流程
 ```
 POST /api/candidates
   → 参数验证
   → 检查身份证号唯一性
   → 创建Candidate记录
+  → 创建CandidateStage记录（自动关联）
   → 返回创建结果
 ```
 
-#### 2.4.2 推进阶段流程
+#### 2.5.2 推进阶段流程
 ```
 PUT /api/candidates/:id/advance
   → 验证权限
-  → 获取当前阶段
+  → 获取当前阶段（从CandidateStage）
   → 检查推进条件
-  → 更新阶段字段
+  → 更新CandidateStage字段
   → 如果推进到pending_onboarding，创建Employee记录
   → 返回结果
 ```
 
-#### 2.4.3 面推流程
+#### 2.5.3 面推流程
 ```
 POST /api/candidates/:id/push-interview
   → 验证权限
   → 检查面推条件(can-recommend)
-  → 创建Interview记录(currentStage=recommend_interview)
+  → 创建Interview记录
   → 创建InterviewRound记录(stageCode=recommend_interview, currentStatus=pending_filter)
-  → 更新candidate.current_stage
+  → 更新CandidateStage.currentStage
   → 返回结果
 ```
 
-### 2.5 数据库操作规则
+### 2.6 数据库操作规则
 
-#### 2.5.1 事务处理
+#### 2.6.1 事务处理
 - 涉及多表操作时使用事务
 - 面试推进操作使用事务
 - 员工创建与阶段更新使用事务
 
-#### 2.5.2 外键约束
+#### 2.6.2 外键约束
 ```sql
 Candidate.lastOperatorId → User.id
-Candidate.consultantId → User.id
+CandidateStage.candidateId → Candidate.id (UNIQUE)
+CandidateStage.consultantId → User.id
+CandidateStage.updatedBy → User.id
 Interview.candidateId → Candidate.id (UNIQUE)
-Interview.productLineId → ProductLine.id (可空)
+Interview.businessLineId → BusinessLine.id (可空)
 InterviewRound.interviewId → Interview.id
 Employee.candidateId → Candidate.id
-Employee.productLineId → ProductLine.id (可空)
+Employee.businessLineId → BusinessLine.id (可空)
+Employee.updatedBy → User.id
 ```
 
 **说明**：
-- Interview.candidateId 有 UNIQUE 约束，确保一个候选人只能有一条面试记录
+- CandidateStage.candidateId 有 UNIQUE 约束，一个候选人只有一条阶段记录
 - CandidateProductLine 表已删除
-- ProductLine.clientOwner 字段已删除
+- BusinessLine.clientOwner 字段已删除
 - TestType 表已删除，Test.testTypeId 字段已删除
 
-#### 2.5.3 命名规范
+#### 2.6.3 命名规范
 - 数据库字段：snake_case
 - 模型属性：camelCase（通过 underscored: true 映射）
 
-### 2.6 状态同步机制
+### 2.7 状态同步机制
 
-#### 2.6.1 面试记录状态
+#### 2.7.1 面试记录状态
 ```
-pending → passed → failed
-         ↖       ↙
+progressing → passed → failed
+         ↖          ↙
            可更新
 ```
 
-#### 2.6.2 面试轮次状态
+#### 2.7.2 面试轮次状态
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | currentStatus | VARCHAR(50) | 当前状态（pending_filter=待筛选, passed=通过, failed=未通过） |
@@ -263,9 +294,16 @@ pending → passed → failed
 - `passed`：通过
 - `failed`：未通过
 
-#### 2.6.3 候选人阶段同步
-- 候选人阶段与面试记录阶段保持一致
-- 面试记录推进时同步更新候选人阶段
+#### 2.7.3 阶段变更历史
+- CandidateStage.stageHistory 记录所有阶段变更
+- 格式：JSON数组，每个元素包含阶段、时间、操作人
+- 示例：
+```json
+[
+  {"stage": "candidate_entry", "time": "2026-05-11T10:00:00Z", "operator": 1},
+  {"stage": "exam_declare", "time": "2026-05-11T11:00:00Z", "operator": 1}
+]
+```
 
 ## 三、业务异常处理
 
@@ -294,11 +332,13 @@ API请求 → 参数验证 → 业务验证 → 数据库操作 → 返回响应
 ### 4.1 统计维度
 
 #### 4.1.1 阶段统计
-- 按 candidate.current_stage 分组统计
+- **数据源**：CandidateStage 表（而非 Candidate 表）
+- 按 CandidateStage.currentStage 分组统计
 - 包含所有阶段
 
 #### 4.1.2 顾问统计
-- 按 Candidate.consultantId 分组统计
+- **数据源**：CandidateStage 表（而非 Candidate 表）
+- 按 CandidateStage.consultantId 分组统计
 - 包含 manager 和 consultant 角色
 - 排除 admin 用户
 
@@ -316,7 +356,7 @@ API请求 → 参数验证 → 业务验证 → 数据库操作 → 返回响应
 ## 五、配置规则
 
 ### 5.1 阶段配置
-- 各模块可独立配置可见阶段
+- 各模块独立配置自己相关的阶段
 - 通过 StageConfig 表管理
 - 配置格式：JSON数组
 - **候选录入模块（candidate_entry）规则**：
@@ -324,20 +364,20 @@ API请求 → 参数验证 → 业务验证 → 数据库操作 → 返回响应
   - 不再包含配置阶段之后的阶段
   - 列表API支持stages参数传递阶段数组
 
-### 5.2 默认配置
+### 5.2 默认配置（模块化）
 ```json
 {
-  "candidate_entry": ["candidate_entry", "exam_declare", "exam_complete", "test_declare", "test_complete", "recommend_interview", "qualification_interview", "tech_interview_1", "tech_interview_2", "manager_interview", "approval", "offer", "pending_onboarding", "entry", "leave"],
-  "exam_management": ["candidate_entry", "exam_declare", "exam_complete", "test_declare", "test_complete", "recommend_interview", "qualification_interview", "tech_interview_1", "tech_interview_2", "manager_interview", "approval", "offer", "pending_onboarding", "entry", "leave"],
-  "test_management": ["candidate_entry", "exam_declare", "exam_complete", "test_declare", "test_complete", "recommend_interview", "qualification_interview", "tech_interview_1", "tech_interview_2", "manager_interview", "approval", "offer", "pending_onboarding", "entry", "leave"],
-  "interview_management": ["candidate_entry", "exam_declare", "exam_complete", "test_declare", "test_complete", "recommend_interview", "qualification_interview", "tech_interview_1", "tech_interview_2", "manager_interview", "approval", "offer", "pending_onboarding", "entry", "leave"],
+  "candidate_entry": ["candidate_entry"],
+  "exam_management": ["exam_declare", "exam_complete"],
+  "test_management": ["test_declare", "test_complete"],
+  "interview_management": ["recommend_interview", "qualification_interview", "tech_interview_1", "tech_interview_2", "manager_interview", "approval", "offer", "pending_onboarding"],
   "employee_management": ["pending_onboarding", "entry", "leave"]
 }
 ```
 
 ---
 
-**版本**: v1.8  
+**版本**: v2.0  
 **生成日期**: 2026-05-11  
 **适用系统**: OD-Recruit 招聘管理系统
 ---
@@ -345,11 +385,7 @@ API请求 → 参数验证 → 业务验证 → 数据库操作 → 返回响应
 ## 版本历史
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| v2.0 | 2026-05-11 | 1. 核心架构重构：新增 CandidateStage 表统一管理阶段<br>2. 简化 Candidate/Employee/Interview 表，移除冗余字段<br>3. 统计数据源从 Candidate 表改为 CandidateStage 表<br>4. 阶段配置模块化：各模块只配置自己相关的阶段<br>5. 单一数据源原则：所有阶段从 CandidateStage 查询 |
 | v1.8 | 2026-05-11 | 1. 修复统计报表模块报错：`by-consultant` 和 `summary` 接口将 `consultantId` 字段从 `Candidate` 表改为从 `CandidateStage` 表查询 |
 | v1.7 | 2026-05-09 | 1. 员工管理所有阶段变化都会同步到面试表<br>2. 员工和面试关联统一使用 candidateId<br>3. 面试管理列表新增入职日期和离职日期列，从 Employee 表获取<br>4. 修复编辑 Offer 阶段时显示接受状态和入职日期<br>5. 修复员工管理编辑保存时入职日期丢失问题 |
-| v1.5 | 2026-05-08 | 1. **删除CandidateProductLine表**，简化数据模型<br>2. Interview表新增productLineId字段，直接关联产品线<br>3. InterviewRound表：passed改为currentStatus，新增feedbackDate字段<br>4. 推荐面试阶段状态：待筛选(pending_filter)/通过(passed)/未通过(failed)<br>5. 面推流程简化：直接创建Interview和InterviewRound记录，推荐日期设为当天<br>6. 推进条件更新：推荐面试需当前状态不为待筛选 |
-| v1.4 | 2026-05-08 | 1. 删除Interview表recommendDate字段，复用InterviewRound.scheduledDate<br>2. 面推不再选择产品线，可在面试管理中后续选择<br>3. 修复面试管理分页查询错误 |
-| v1.3 | 2026-05-07 | 1. Interview表新增candidateId字段（NOT NULL + UNIQUE），实现"一个候选人只能有一次面试机会"<br>2. CandidateProductLine表productLineId改为可空，移除唯一性约束<br>3. 删除韧测类型表(TestType)及相关代码和字段<br>4. 删除ProductLine表的clientOwner字段<br>5. 面试记录关联候选人而非产品线 |
-| v1.2 | 2026-05-05 | 1. 优化面试管理同步逻辑：当finalStatus为passed时，候选人阶段保持与interview.currentStage一致<br>2. 修改PUT接口逻辑：编辑保存时仅当轮次未通过时设置finalStatus为failed<br>3. 修复前端编辑权限：即使finalStatus为passed，只要是当前阶段就可以编辑<br>4. 统一机考、韧测、候选录入模块的列表获取逻辑和API优化 |
-| v1.1 | 2026-05-05 | 更新候选录入模块阶段获取规则：仅配置的阶段，不再包含之后阶段 |
-| v1.0 | 2026-05-04 | 初始版本 |
+| v1.5 | 2026-05-08 | 1. **删除CandidateProductLine表**，简化数据模型<br>2. Interview表新增businessLineId字段，直接关联产品线<br>3. InterviewRound表：passed改为currentStatus，新增feedbackDate字段<br>4. 推荐面试阶段状态：待筛选(pending_filter)/通过(passed)/未通过(failed)<br>5. 面推流程简化：直接创建Interview和InterviewRound记录，推荐日期设为当天<br>6. 推进条件更新：推荐面试需当前状态不为待筛选 |

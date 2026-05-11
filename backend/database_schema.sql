@@ -1,6 +1,6 @@
 -- ===========================================
 -- 数据库 Schema
--- 版本: 1.8
+-- 版本: 2.0
 -- 日期: 2026-05-11
 -- ===========================================
 
@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS business_line (
 
 -- ===========================================
 -- 候选人表 Candidate
+-- 仅存储候选人基本信息，阶段信息统一由 CandidateStage 管理
 -- ===========================================
 CREATE TABLE IF NOT EXISTS candidate (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,6 +59,7 @@ CREATE TABLE IF NOT EXISTS candidate (
 -- ===========================================
 -- 候选人阶段表 CandidateStage
 -- 统一管理候选人从录入到离职的全生命周期阶段
+-- 包含 consultantId、currentStage、stageHistory 等
 -- ===========================================
 CREATE TABLE IF NOT EXISTS candidate_stage (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,6 +78,8 @@ CREATE TABLE IF NOT EXISTS candidate_stage (
 
 -- ===========================================
 -- 员工表 Employee
+-- 仅存储员工特有信息，个人信息通过 candidate_id 从 candidate 表获取
+-- 阶段信息统一从 candidate_stage 表获取
 -- ===========================================
 CREATE TABLE IF NOT EXISTS employee (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -94,14 +98,10 @@ CREATE TABLE IF NOT EXISTS employee (
     FOREIGN KEY (updated_by) REFERENCES user(id)
 );
 
--- 说明：
--- 1. 已删除冗余字段：name, email, phone, gender, id_card, last_operator_id, current_stage
--- 2. 员工个人信息通过 candidate_id 关联从 candidate 表获取
--- 3. 当前阶段统一从 candidate_stage 表获取
--- 4. 新增 updated_by 字段记录操作人
-
 -- ===========================================
 -- 面试表 Interview
+-- 一个候选人只能有一条面试记录（UNIQUE约束）
+-- 阶段信息统一从 candidate_stage 表获取
 -- ===========================================
 CREATE TABLE IF NOT EXISTS interview (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -113,11 +113,6 @@ CREATE TABLE IF NOT EXISTS interview (
     FOREIGN KEY (candidate_id) REFERENCES candidate(id),
     FOREIGN KEY (business_line_id) REFERENCES business_line(id)
 );
-
--- 说明：
--- 1. 一个候选人只能有一条面试记录（UNIQUE约束）
--- 2. 已删除 candidateProductLineId 字段，改为直接关联 businessLineId
--- 3. 已删除 current_stage 字段，统一从 candidate_stage 表获取
 
 -- ===========================================
 -- 面试轮次表 interview_round
@@ -177,7 +172,6 @@ CREATE TABLE IF NOT EXISTS exam (
 -- 1. examPassed 已重命名为 currentStatus（当前状态），值：pending(待录分)/passed(通过)/failed(未通过)
 -- 2. 已删除 exam_complete_date 字段
 
-
 -- ===========================================
 -- 韧测表 test
 -- ===========================================
@@ -218,6 +212,7 @@ CREATE TABLE IF NOT EXISTS stage_config (
 CREATE INDEX IF NOT EXISTS idx_candidate_last_operator ON candidate(last_operator_id);
 CREATE INDEX IF NOT EXISTS idx_candidate_stage_candidate ON candidate_stage(candidate_id);
 CREATE INDEX IF NOT EXISTS idx_candidate_stage_current_stage ON candidate_stage(current_stage);
+CREATE INDEX IF NOT EXISTS idx_candidate_stage_consultant ON candidate_stage(consultant_id);
 CREATE INDEX IF NOT EXISTS idx_employee_business_line ON employee(business_line_id);
 CREATE INDEX IF NOT EXISTS idx_employee_candidate ON employee(candidate_id);
 CREATE INDEX IF NOT EXISTS idx_exam_candidate ON exam(candidate_id);
@@ -234,12 +229,12 @@ CREATE INDEX IF NOT EXISTS idx_stage_config_module ON stage_config(module);
 -- 初始化数据（默认配置）
 -- ===========================================
 
--- 默认阶段配置
+-- 默认阶段配置：每个模块只管理自己相关的阶段
 INSERT OR IGNORE INTO stage_config (module, stages, stage_names, created_at, updated_at) VALUES
-    ('candidate_entry', '["candidate_entry", "exam_declare", "exam_complete", "test_declare", "test_complete", "recommend_interview", "qualification_interview", "tech_interview_1", "tech_interview_2", "manager_interview", "approval", "offer", "pending_onboarding", "entry", "leave"]', '{"candidate_entry":"候选录入","exam_declare":"机考申报","exam_complete":"机考完成","test_declare":"韧测申报","test_complete":"韧测完成","recommend_interview":"推荐面试","qualification_interview":"资面安排","tech_interview_1":"技术面试(一)","tech_interview_2":"技术面试(二)","manager_interview":"主管面试","approval":"租用审批","offer":"Offer","pending_onboarding":"待入职","entry":"入职","leave":"离职"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('exam_management', '["candidate_entry", "exam_declare", "exam_complete", "test_declare", "test_complete", "recommend_interview", "qualification_interview", "tech_interview_1", "tech_interview_2", "manager_interview", "approval", "offer", "pending_onboarding", "entry", "leave"]', '{"candidate_entry":"候选录入","exam_declare":"机考申报","exam_complete":"机考完成","test_declare":"韧测申报","test_complete":"韧测完成","recommend_interview":"推荐面试","qualification_interview":"资面安排","tech_interview_1":"技术面试(一)","tech_interview_2":"技术面试(二)","manager_interview":"主管面试","approval":"租用审批","offer":"Offer","pending_onboarding":"待入职","entry":"入职","leave":"离职"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('test_management', '["candidate_entry", "exam_declare", "exam_complete", "test_declare", "test_complete", "recommend_interview", "qualification_interview", "tech_interview_1", "tech_interview_2", "manager_interview", "approval", "offer", "pending_onboarding", "entry", "leave"]', '{"candidate_entry":"候选录入","exam_declare":"机考申报","exam_complete":"机考完成","test_declare":"韧测申报","test_complete":"韧测完成","recommend_interview":"推荐面试","qualification_interview":"资面安排","tech_interview_1":"技术面试(一)","tech_interview_2":"技术面试(二)","manager_interview":"主管面试","approval":"租用审批","offer":"Offer","pending_onboarding":"待入职","entry":"入职","leave":"离职"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-    ('interview_management', '["candidate_entry", "exam_declare", "exam_complete", "test_declare", "test_complete", "recommend_interview", "qualification_interview", "tech_interview_1", "tech_interview_2", "manager_interview", "approval", "offer", "pending_onboarding", "entry", "leave"]', '{"candidate_entry":"候选录入","exam_declare":"机考申报","exam_complete":"机考完成","test_declare":"韧测申报","test_complete":"韧测完成","recommend_interview":"推荐面试","qualification_interview":"资面安排","tech_interview_1":"技术面试(一)","tech_interview_2":"技术面试(二)","manager_interview":"主管面试","approval":"租用审批","offer":"Offer","pending_onboarding":"待入职","entry":"入职","leave":"离职"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('candidate_entry', '["candidate_entry"]', '{"candidate_entry":"候选录入"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('exam_management', '["exam_declare", "exam_complete"]', '{"exam_declare":"机考申报","exam_complete":"机考完成"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('test_management', '["test_declare", "test_complete"]', '{"test_declare":"韧测申报","test_complete":"韧测完成"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('interview_management', '["recommend_interview", "qualification_interview", "tech_interview_1", "tech_interview_2", "manager_interview", "approval", "offer", "pending_onboarding"]', '{"recommend_interview":"推荐面试","qualification_interview":"资面安排","tech_interview_1":"技术面试(一)","tech_interview_2":"技术面试(二)","manager_interview":"主管面试","approval":"租用审批","offer":"Offer","pending_onboarding":"待入职"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     ('employee_management', '["pending_onboarding", "entry", "leave"]', '{"pending_onboarding":"待入职","entry":"入职","leave":"离职"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
 -- ===========================================
@@ -267,9 +262,21 @@ INSERT OR IGNORE INTO stage_config (module, stages, stage_names, created_at, upd
 -- 候选录入 → 机考申报 → 机考完成 → 韧测申报 → 韧测完成 → 推荐面试 → 资面安排 → 技术面试(一) → 技术面试(二) → 主管面试 → 租用审批 → Offer → 待入职 → 入职 → 离职
 
 -- ===========================================
+-- 核心架构变化说明 (v2.0)
+-- ===========================================
+-- 1. 新增 CandidateStage 表：统一管理所有候选人的阶段、顾问关联、阶段历史
+-- 2. 简化 Candidate 表：移除 currentStage、consultantId，仅保留基本信息
+-- 3. 简化 Employee 表：移除冗余的个人信息字段，通过 candidate_id 关联获取
+-- 4. 简化 Interview 表：移除 currentStage、finalStatus，仅保留 currentStatus
+-- 5. 阶段配置模块化：每个模块只配置自己相关的阶段
+-- 6. 统计数据从 CandidateStage 表查询（而非 Candidate 表）
+
+-- ===========================================
 -- 关系图
 -- ===========================================
 -- User <---+---> (one-to-many) Candidate (last operator)
+--          |
+--          +---> (one-to-many) CandidateStage (consultant)
 --          |
 --          +---> (one-to-many) CandidateStage (updated by)
 --          |
