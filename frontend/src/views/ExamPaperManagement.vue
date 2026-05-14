@@ -2,7 +2,7 @@
   <div class="page-container">
     <div class="page-header">
       <h2 class="page-title">机考配置</h2>
-      <el-button type="primary" @click="handleCreate" v-if="authStore.isManager">
+      <el-button type="primary" @click="handleCreate" v-if="authStore.hasPermission('btn_exam_paper_create')">
         <el-icon><Plus /></el-icon>
         新增机考配置
       </el-button>
@@ -30,11 +30,11 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" fixed="right" width="150" v-if="authStore.isManager">
+        <el-table-column label="操作" fixed="right" width="150" v-if="authStore.hasPermission('btn_exam_paper_edit') || authStore.hasPermission('btn_exam_paper_delete')">
           <template #default="{ row }">
-            <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button v-if="row.isActive" type="danger" link size="small" @click="handleDelete(row)">禁用</el-button>
-            <el-button v-else type="success" link size="small" @click="handleEnable(row)">启用</el-button>
+            <el-button type="primary" link size="small" @click="handleEdit(row)" v-if="authStore.hasPermission('btn_exam_paper_edit')">编辑</el-button>
+            <el-button type="danger" link size="small" @click="handleDelete(row)" v-if="row.isActive && authStore.hasPermission('btn_exam_paper_delete')">禁用</el-button>
+            <el-button type="success" link size="small" @click="handleEnable(row)" v-else-if="authStore.hasPermission('btn_exam_paper_delete')">启用</el-button>
           </template>
         </el-table-column>
       </el-table>

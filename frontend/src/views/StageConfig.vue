@@ -204,6 +204,27 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.page-container {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.page-header {
+  margin-top: 0;
+  padding-top: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+}
+
 .module-card {
   margin-bottom: 20px;
 }

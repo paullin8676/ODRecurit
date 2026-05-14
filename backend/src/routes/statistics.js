@@ -8,18 +8,27 @@ const router = express.Router();
 router.get('/by-consultant', authenticate, async (req, res, next) => {
   try {
     const { startDate, endDate } = req.query;
+    const { Role, UserRole } = require('../models');
     
     const users = await User.findAll({
       where: {
-        role: { [Op.in]: ['consultant', 'manager'] },
         isActive: true,
         username: { [Op.ne]: 'admin' }
       },
-      attributes: ['id', 'username', 'realName', 'role']
+      attributes: ['id', 'username', 'realName'],
+      include: [{
+        model: Role,
+        through: UserRole,
+        as: 'Roles'
+      }]
     });
+    
+    const filteredUsers = users.filter(user => 
+      user.Roles.some(r => ['consultant', 'manager', 'supervisor', 'director'].includes(r.code))
+    );
 
     const results = [];
-    for (const user of users) {
+    for (const user of filteredUsers) {
       const where = { consultantId: user.id };
       
       if (startDate || endDate) {
@@ -146,7 +155,8 @@ router.get('/summary', authenticate, async (req, res, next) => {
   try {
     let total = await Candidate.count();
 
-    if (req.user.role === 'consultant') {
+    const hasConsultantRoleOnly = req.user.roles.length === 1 && req.user.roles[0].code === 'consultant';
+    if (hasConsultantRoleOnly) {
       total = await CandidateStage.count({ where: { consultantId: req.user.id } });
     }
 
@@ -182,6 +192,41 @@ router.get('/summary', authenticate, async (req, res, next) => {
         entered
       }
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+const CandidateStageTimelineService = require('../services/CandidateStageTimelineService');
+
+router.get('/stage-duration-records', authenticate, async (req, res, next) => {
+  try {
+    const { startDate, endDate, stage, name, page = 1, pageSize = 20 } = req.query;
+    const result = await CandidateStageTimelineService.getDurationRecords({
+      startDate, endDate, stage, name, page: parseInt(page), pageSize: parseInt(pageSize)
+    });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/stage-duration-agg', authenticate, async (req, res, next) => {
+  try {
+    const { startDate, endDate, stage } = req.query;
+    const result = await CandidateStageTimelineService.getDurationAggregations({
+      startDate, endDate, stage
+    });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/candidate-total-durations', authenticate, async (req, res, next) => {
+  try {
+    const result = await CandidateStageTimelineService.getCandidateTotalDurations();
+    res.json({ records: result });
   } catch (error) {
     next(error);
   }

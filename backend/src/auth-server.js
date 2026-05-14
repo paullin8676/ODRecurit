@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const { initDatabase, User } = require('./models');
+const { initDatabase, User, Role, UserRole } = require('./models');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
@@ -20,7 +20,14 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Username and password are required' });
     }
 
-    const user = await User.findOne({ where: { username } });
+    const user = await User.findOne({ 
+      where: { username },
+      include: [{
+        model: Role,
+        through: UserRole,
+        as: 'Roles'
+      }]
+    });
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -38,16 +45,24 @@ app.post('/api/auth/login', async (req, res) => {
 
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
 
+    const roles = user.Roles ? user.Roles.map(r => ({
+      id: r.id,
+      name: r.name,
+      code: r.code,
+      level: r.level,
+      dataScope: r.dataScope
+    })) : [];
+
     res.json({ 
       message: 'Login successful', 
       token, 
       user: {
         id: user.id,
         username: user.username,
-        role: user.role,
         realName: user.realName,
         email: user.email,
-        phone: user.phone
+        phone: user.phone,
+        roles
       }
     });
   } catch (error) {

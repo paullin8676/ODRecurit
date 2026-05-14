@@ -37,6 +37,11 @@
             {{ row.currentStage ? stageNames[row.currentStage] : '-' }}
           </template>
         </el-table-column>
+        <el-table-column label="负责顾问" width="120">
+          <template #default="{ row }">
+            {{ row.consultantName || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column label="试卷名称" width="180">
           <template #default="{ row }">
             {{ row.exam?.examPaper?.name || '-' }}
@@ -202,6 +207,11 @@
             <el-col :span="12">
               <el-form-item label="身份证号">
                 <el-input :value="selectedEmployee.idCard" :disabled="true" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="负责顾问">
+                <el-input :value="selectedEmployee.consultantName || '-'" :disabled="true" />
               </el-form-item>
             </el-col>
           </el-row>
@@ -375,6 +385,7 @@ const fetchEmployees = async () => {
       email: item.email,
       idCard: item.idCard,
       currentStage: item.currentStage || '',
+      consultantName: item.consultantName || '-',
       exam: item.exam
     }))
 
@@ -583,6 +594,12 @@ const handleView = async (row) => {
     }
 
     const candidateWithExam = { ...data.candidate }
+    
+    if (data.candidate.consultant) {
+      candidateWithExam.consultantName = data.candidate.consultant.realName
+    } else {
+      candidateWithExam.consultantName = '-'
+    }
 
     const examData = await examApi.getByCandidate(row.id)
     if (examData.exam) {
@@ -628,16 +645,9 @@ const handleRollback = async (row) => {
       await examApi.delete(row.exam.id)
     }
     
-    await candidateApi.update(row.id, { 
-      name: row.name, 
-      gender: row.gender,
-      phone: row.phone,
-      email: row.email,
-      idCard: row.idCard,
-      currentStage: 'candidate_entry' 
-    })
+    await candidateApi.rollback(row.id, { businessLineId: row.businessLine?.id })
     
-    ElMessage.success('回退成功，已将候选人阶段切换为候选录入')
+    ElMessage.success('回退成功')
     fetchEmployees()
   } catch (error) {
     ElMessage.error(error.message || '回退失败')

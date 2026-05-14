@@ -2,7 +2,7 @@
   <div class="page-container">
     <div class="page-header">
       <h2 class="page-title">用户管理</h2>
-      <el-button type="primary" @click="handleCreate" v-if="authStore.isManager">
+      <el-button type="primary" @click="handleCreate" v-if="authStore.hasPermission('btn_user_create')">
         <el-icon><Plus /></el-icon>
         新增用户
       </el-button>
@@ -12,10 +12,15 @@
       <el-table :data="users" v-loading="loading" stripe>
         <el-table-column prop="username" label="用户名" width="150" />
         <el-table-column prop="realName" label="姓名" width="120" />
-        <el-table-column prop="role" label="角色" width="100">
+        <el-table-column prop="roles" label="角色" width="200">
           <template #default="{ row }">
-            <el-tag :type="row.role === 'manager' ? 'danger' : 'primary'" size="small">
-              {{ row.role === 'manager' ? '主管' : '顾问' }}
+            <el-tag
+              v-for="role in row.roles"
+              :key="role.id"
+              :type="getRoleTagType(role.code)"
+              size="small"
+            >
+              {{ role.name }}
             </el-tag>
           </template>
         </el-table-column>
@@ -33,10 +38,10 @@
             {{ row.lastLoginAt ? formatDate(row.lastLoginAt) : '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" fixed="right" width="150" v-if="authStore.isManager">
+        <el-table-column label="操作" fixed="right" width="200">
           <template #default="{ row }">
-            <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button type="danger" link size="small" @click="handleDelete(row)" :disabled="row.id === authStore.user?.id">
+            <el-button type="primary" link size="small" @click="handleEdit(row)" v-if="authStore.hasPermission('btn_user_edit')">编辑</el-button>
+            <el-button type="danger" link size="small" @click="handleDelete(row)" :disabled="row.id === authStore.user?.id" v-if="authStore.hasPermission('btn_user_delete')">
               删除
             </el-button>
           </template>
@@ -55,14 +60,14 @@
         <el-form-item label="姓名" prop="realName">
           <el-input v-model="form.realName" />
         </el-form-item>
-        <el-form-item label="角色" prop="role">
-          <el-select v-model="form.role" style="width: 100%" @change="handleRoleChange">
-            <el-option label="顾问" value="consultant" />
-            <el-option label="主管" value="manager" />
+        <el-form-item label="角色" prop="roleIds">
+          <el-select v-model="form.roleIds" multiple style="width: 100%">
+            <el-option v-for="role in allRoles" :key="role.id" :label="role.name" :value="role.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="上级主管" prop="managerId" v-if="form.role === 'consultant'">
+        <el-form-item label="上级主管" prop="managerId">
           <el-select v-model="form.managerId" style="width: 100%" placeholder="请选择上级主管">
+            <el-option label="无" :value="''" />
             <el-option v-for="manager in managers" :key="manager.id" :label="manager.realName" :value="manager.id" />
           </el-select>
         </el-form-item>
@@ -90,11 +95,13 @@ import { userApi } from '../api'
 import { useAuthStore } from '../stores/auth'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
+import api from '../utils/api'
 
 const authStore = useAuthStore()
 
 const users = ref([])
 const managers = ref([])
+const allRoles = ref([])
 const loading = ref(false)
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增用户')
@@ -107,7 +114,7 @@ const form = reactive({
   username: '',
   password: '',
   realName: '',
-  role: 'consultant',
+  roleIds: [],
   managerId: null,
   email: '',
   phone: '',
@@ -117,8 +124,7 @@ const form = reactive({
 const rules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }, { min: 6, message: '密码长度不能少于6位', trigger: 'blur' }],
-  role: [{ required: true, message: '请选择角色', trigger: 'change' }],
-  managerId: [{ required: true, message: '请选择上级主管', trigger: 'change' }]
+  roleIds: [{ required: true, message: '请选择角色', trigger: 'change' }]
 }
 
 const formatDate = (date) => {
@@ -126,13 +132,25 @@ const formatDate = (date) => {
   return new Date(date).toLocaleString('zh-CN')
 }
 
+const getRoleTagType = (code) => {
+  const types = {
+    admin: 'danger',
+    director: 'warning',
+    manager: 'primary',
+    supervisor: 'info',
+    consultant: 'success'
+  }
+  return types[code] || 'default'
+}
+
 const fetchUsers = async () => {
   loading.value = true
   try {
     const data = await userApi.getAll()
     users.value = data.users
-    // 过滤出主管用户
-    managers.value = data.users.filter(user => user.role === 'manager')
+    managers.value = data.users.filter(user => {
+      return user.roles?.some(r => r.level >= 2)
+    })
   } catch (error) {
     ElMessage.error('获取用户列表失败')
   } finally {
@@ -140,17 +158,20 @@ const fetchUsers = async () => {
   }
 }
 
-const handleRoleChange = () => {
-  if (form.role === 'manager') {
-    form.managerId = null
+const fetchRoles = async () => {
+  try {
+    const data = await api.get('/roles')
+    allRoles.value = data
+  } catch (error) {
+    ElMessage.error('获取角色列表失败')
   }
 }
 
 const handleCreate = () => {
   dialogTitle.value = '新增用户'
   isEdit.value = false
-  form.role = 'consultant'
-  form.managerId = null
+  form.roleIds = []
+  form.managerId = ''
   dialogVisible.value = true
 }
 
@@ -158,11 +179,14 @@ const handleEdit = (row) => {
   dialogTitle.value = '编辑用户'
   isEdit.value = true
   currentId.value = row.id
+  
+  const roleIds = row.roles?.map(r => r.id) || []
+  
   Object.assign(form, {
     username: row.username,
     realName: row.realName,
-    role: row.role,
-    managerId: row.managerId,
+    roleIds: roleIds,
+    managerId: row.managerId || '',
     email: row.email,
     phone: row.phone,
     isActive: row.isActive
@@ -187,11 +211,14 @@ const handleSubmit = async () => {
   submitLoading.value = true
   try {
     if (isEdit.value) {
-      const { username, password, ...updateData } = form
+      const { username, password, roleIds, ...updateData } = form
       await userApi.update(currentId.value, updateData)
+      await api.post(`/user-roles/user/${currentId.value}`, { roleIds })
       ElMessage.success('更新成功')
     } else {
-      await userApi.create(form)
+      const { roleIds, ...createData } = form
+      const data = await userApi.create(createData)
+      await api.post(`/user-roles/user/${data.user.id}`, { roleIds })
       ElMessage.success('创建成功')
     }
     dialogVisible.value = false
@@ -209,7 +236,7 @@ const handleDialogClose = () => {
     username: '',
     password: '',
     realName: '',
-    role: 'consultant',
+    roleIds: [],
     managerId: null,
     email: '',
     phone: '',
@@ -217,8 +244,9 @@ const handleDialogClose = () => {
   })
 }
 
-onMounted(() => {
-  fetchUsers()
+onMounted(async () => {
+  await fetchRoles()
+  await fetchUsers()
 })
 </script>
 

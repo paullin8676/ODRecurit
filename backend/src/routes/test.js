@@ -1,12 +1,13 @@
 const express = require('express');
 const { Op } = require('sequelize');
-const { Test, Candidate, CandidateStage } = require('../models');
+const { Test, Candidate, CandidateStage, User } = require('../models');
 const { authenticate } = require('../middleware/auth');
+const dataPermission = require('../middleware/dataPermission');
 const StageService = require('../services/stageService');
 
 const router = express.Router();
 
-router.get('/', authenticate, async (req, res, next) => {
+router.get('/', authenticate, dataPermission, async (req, res, next) => {
   try {
     const { page = 1, pageSize = 20, name = '', currentStage = '', stages = '' } = req.query;
 
@@ -30,19 +31,26 @@ router.get('/', authenticate, async (req, res, next) => {
       stageWhere.currentStage = { [Op.in]: stageArray };
     }
 
+    // 添加数据权限过滤
+    if (req.consultantIds && req.consultantIds.length > 0) {
+      stageWhere.consultantId = { [Op.in]: req.consultantIds };
+    }
+
     // 使用 findAndCountAll 进行数据库分页
+    const include = Object.keys(stageWhere).length > 0 ? [
+      {
+        model: CandidateStage,
+        where: stageWhere,
+        required: true
+      }
+    ] : [];
+
     const { count, rows } = await Candidate.findAndCountAll({
       where,
       order: [['createdAt', 'DESC']],
       limit: size,
       offset: (pageNum - 1) * size,
-      include: Object.keys(stageWhere).length > 0 ? [
-        {
-          model: CandidateStage,
-          where: stageWhere,
-          required: true
-        }
-      ] : []
+      include
     });
 
     const candidateIds = rows.map(c => c.id);
@@ -64,6 +72,7 @@ router.get('/', authenticate, async (req, res, next) => {
     const resultCandidates = await Promise.all(rows.map(async candidate => {
       const test = testMap[candidate.id];
       const candidateStage = await StageService.getStage(candidate.id);
+      const consultant = candidateStage && candidateStage.consultantId ? await User.findByPk(candidateStage.consultantId) : null;
       return {
         id: candidate.id,
         name: candidate.name,
@@ -72,6 +81,7 @@ router.get('/', authenticate, async (req, res, next) => {
         email: candidate.email,
         idCard: candidate.idCard,
         currentStage: candidateStage ? candidateStage.currentStage : 'candidate_entry',
+        consultantName: consultant ? consultant.realName : '-',
         test: test && test.id ? {
           id: test.id,
           candidateId: test.candidateId,
@@ -139,10 +149,6 @@ router.post('/', authenticate, async (req, res, next) => {
         emotionScore,
         currentStatus: currentStatus || 'pending'
       });
-    }
-
-    if (currentStatus === 'passed' || currentStatus === 'failed' || currentStatus === 'abandoned') {
-      await StageService.updateStage(candidateId, 'test_complete', req.user?.id);
     }
 
     const updatedTest = await Test.findByPk(test.id);

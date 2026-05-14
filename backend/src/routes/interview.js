@@ -1,8 +1,10 @@
 
 const express = require('express');
-const { Interview, InterviewRound, StageConfig, Candidate, CandidateStage, Employee, BusinessLine } = require('../models');
+const { Interview, InterviewRound, StageConfig, Candidate, CandidateStage, Employee, BusinessLine, User } = require('../models');
 const { authenticate } = require('../middleware/auth');
+const dataPermission = require('../middleware/dataPermission');
 const StageService = require('../services/stageService');
+const CandidateStageTimelineService = require('../services/CandidateStageTimelineService');
 
 const router = express.Router();
 
@@ -136,7 +138,7 @@ const syncEmployeeOnOffer = async (interviewId, roundsData, operatorId) => {
 };
 
 // Helper function to transform interview data
-const transformInterview = (interview, employee = null, currentStage = null) => {
+const transformInterview = (interview, employee = null, currentStage = null, consultantName = '-') => {
   const baseData = interview.toJSON();
   
   const candidate = baseData.Candidate;
@@ -163,17 +165,18 @@ const transformInterview = (interview, employee = null, currentStage = null) => 
     roundsMap: roundsMap,
     currentStage: currentStage,
     employeeEntryDate: employee ? employee.entryDate : null,
-    employeeLeaveDate: employee ? employee.leaveDate : null
+    employeeLeaveDate: employee ? employee.leaveDate : null,
+    consultantName: consultantName
   };
 };
 
 // Get all interviews
-router.get('/', authenticate, async (req, res, next) => {
+router.get('/', authenticate, dataPermission, async (req, res, next) => {
   try {
     const { page = 1, pageSize = 20, currentStage, name, stages, passStatus } = req.query;
+    const { Op } = require('sequelize');
     
     let availableStages = Object.keys(STAGE_NAMES);
-    // 优先使用前端传来的 stages 参数
     if (stages) {
       if (Array.isArray(stages)) {
         availableStages = stages;
@@ -181,7 +184,6 @@ router.get('/', authenticate, async (req, res, next) => {
         availableStages = stages.split(',').map(s => s.trim()).filter(s => s);
       }
     } else {
-      // 如果没有 stages 参数，从数据库读取配置
       try {
         const stageConfig = await StageConfig.findOne({ where: { module: 'interview_management' } });
         if (stageConfig && stageConfig.config && stageConfig.config.stages && Array.isArray(stageConfig.config.stages)) {
@@ -196,11 +198,25 @@ router.get('/', authenticate, async (req, res, next) => {
     if (passStatus) {
       if (passStatus === 'progressing') {
         whereClause.currentStatus = {
-          [require('sequelize').Op.in]: ['progressing', 'pending']
+          [Op.in]: ['progressing', 'pending']
         };
       } else {
         whereClause.currentStatus = passStatus;
       }
+    }
+    
+    const candidateStageWhere = {};
+    
+    if (stages) {
+      candidateStageWhere.currentStage = {
+        [Op.in]: availableStages
+      };
+    }
+    
+    if (req.consultantIds && req.consultantIds.length > 0) {
+      candidateStageWhere.consultantId = {
+        [Op.in]: req.consultantIds
+      };
     }
     
     const include = [
@@ -211,12 +227,8 @@ router.get('/', authenticate, async (req, res, next) => {
           {
             model: CandidateStage,
             as: 'CandidateStage',
-            where: stages ? {
-              currentStage: {
-                [require('sequelize').Op.in]: availableStages
-              }
-            } : undefined,
-            required: !!stages
+            where: Object.keys(candidateStageWhere).length > 0 ? candidateStageWhere : undefined,
+            required: Object.keys(candidateStageWhere).length > 0
           }
         ]
       },
@@ -270,7 +282,9 @@ router.get('/', authenticate, async (req, res, next) => {
       const employee = await Employee.findOne({ where: { candidateId: candidateId } });
       const candidateStage = await StageService.getStage(candidateId);
       const currentStage = candidateStage ? candidateStage.currentStage : null;
-      return transformInterview(interview, employee, currentStage);
+      const consultant = candidateStage && candidateStage.consultantId ? await User.findByPk(candidateStage.consultantId) : null;
+      const consultantName = consultant ? consultant.realName : '-';
+      return transformInterview(interview, employee, currentStage, consultantName);
     }));
     transformedInterviews = transformedInterviews.filter(i => i);
     
@@ -610,6 +624,17 @@ router.put('/rounds/:id', authenticate, async (req, res, next) => {
       feedbackDate,
       completedAt
     });
+    
+    if (round.stageCode === 'recommend_interview' && feedbackDate) {
+      const interview = await Interview.findByPk(round.interviewId);
+      if (interview) {
+        await CandidateStageTimelineService.setRecommendInterviewFeedbackDate(
+          interview.candidateId,
+          feedbackDate,
+          req.user.id
+        );
+      }
+    }
     
     // 更新面试状态
     await updateInterviewStatus(round.interviewId);

@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
+const PermissionService = require('../services/PermissionService');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
@@ -21,7 +22,19 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json({ error: 'User not found or inactive' });
     }
 
-    req.user = user;
+    const roles = await PermissionService.getUserRoles(user.id);
+    const permissions = await PermissionService.getUserPermissions(user.id);
+    const dataScope = await PermissionService.getUserRoleDataScope(user.id);
+    const subordinateIds = await PermissionService.getUserSubordinates(user.id, false);
+
+    req.user = {
+      ...user.toJSON(),
+      roles: roles.map(r => ({ id: r.id, name: r.name, code: r.code, level: r.level, dataScope: r.dataScope })),
+      permissions: permissions.map(p => ({ id: p.id, code: p.code, name: p.name, type: p.type })),
+      dataScope,
+      subordinateIds
+    };
+
     next();
   } catch (error) {
     if (error.name === 'JsonWebTokenError') {
@@ -36,11 +49,24 @@ const authenticate = async (req, res, next) => {
 
 const authorize = (...roles) => {
   return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
+    const userRoleCodes = req.user.roles.map(r => r.code);
+    const hasRole = roles.some(role => userRoleCodes.includes(role));
+    
+    if (!hasRole) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
     next();
   };
 };
 
-module.exports = { authenticate, authorize, JWT_SECRET };
+const requirePermission = (permissionCode) => {
+  return async (req, res, next) => {
+    const hasPermission = await PermissionService.hasPermission(req.user.id, permissionCode);
+    if (!hasPermission) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    next();
+  };
+};
+
+module.exports = { authenticate, authorize, requirePermission, JWT_SECRET };

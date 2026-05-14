@@ -1,8 +1,9 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { User } = require('../models');
+const { User, Role, UserRole } = require('../models');
 const { authenticate, JWT_SECRET } = require('../middleware/auth');
+const PermissionService = require('../services/PermissionService');
 
 const router = express.Router();
 
@@ -23,11 +24,21 @@ router.post('/register', async (req, res, next) => {
     const user = await User.create({
       username,
       password: hashedPassword,
-      role: role || 'consultant',
       realName,
       email,
       phone
     });
+
+    const roleCode = role || 'consultant';
+    const roleRecord = await Role.findOne({ where: { code: roleCode } });
+    if (roleRecord) {
+      await user.addRole(roleRecord);
+    }
+
+    const roles = await PermissionService.getUserRoles(user.id);
+    const permissions = await PermissionService.getUserPermissions(user.id);
+    const dataScope = await PermissionService.getUserRoleDataScope(user.id);
+    const subordinateIds = await PermissionService.getUserSubordinates(user.id, false);
 
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
 
@@ -37,10 +48,13 @@ router.post('/register', async (req, res, next) => {
       user: {
         id: user.id,
         username: user.username,
-        role: user.role,
         realName: user.realName,
         email: user.email,
-        phone: user.phone
+        phone: user.phone,
+        roles: roles.map(r => ({ id: r.id, name: r.name, code: r.code, level: r.level, dataScope: r.dataScope })),
+        permissions: permissions.map(p => ({ id: p.id, code: p.code, name: p.name, type: p.type })),
+        dataScope,
+        subordinateIds
       }
     });
   } catch (error) {
@@ -70,7 +84,12 @@ router.post('/login', async (req, res, next) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // await user.update({ lastLoginAt: new Date() });
+    await user.update({ lastLoginAt: new Date() });
+
+    const roles = await PermissionService.getUserRoles(user.id);
+    const permissions = await PermissionService.getUserPermissions(user.id);
+    const dataScope = await PermissionService.getUserRoleDataScope(user.id);
+    const subordinateIds = await PermissionService.getUserSubordinates(user.id, false);
 
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
 
@@ -80,10 +99,13 @@ router.post('/login', async (req, res, next) => {
       user: {
         id: user.id,
         username: user.username,
-        role: user.role,
         realName: user.realName,
         email: user.email,
-        phone: user.phone
+        phone: user.phone,
+        roles: roles.map(r => ({ id: r.id, name: r.name, code: r.code, level: r.level, dataScope: r.dataScope })),
+        permissions: permissions.map(p => ({ id: p.id, code: p.code, name: p.name, type: p.type })),
+        dataScope,
+        subordinateIds
       }
     });
   } catch (error) {
@@ -113,7 +135,7 @@ router.post('/change-password', authenticate, async (req, res, next) => {
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await req.user.update({ password: hashedPassword });
+    await User.update({ password: hashedPassword }, { where: { id: req.user.id } });
 
     res.json({ message: 'Password changed successfully' });
   } catch (error) {

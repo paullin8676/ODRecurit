@@ -1,8 +1,13 @@
 -- ===========================================
 -- 数据库 Schema
--- 版本: 2.0
--- 日期: 2026-05-11
+-- 版本: 2.1
+-- 日期: 2026-05-12
 -- ===========================================
+
+-- 更新说明:
+-- 1. 用户表(User)已移除role字段，改为通过UserRole关联表实现多对多角色关系
+-- 2. 添加机考试卷相关权限: btn_exam_paper_create, btn_exam_paper_edit, btn_exam_paper_delete
+-- 3. 更新菜单名称: 业务线管理 -> 业务配置, 试卷管理 -> 机考配置
 
 -- ===========================================
 -- 用户表 User
@@ -12,7 +17,6 @@ CREATE TABLE IF NOT EXISTS user (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username VARCHAR(50) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
-    role VARCHAR(20) NOT NULL DEFAULT 'consultant' CHECK(role IN ('consultant', 'manager')),
     real_name VARCHAR(100),
     email VARCHAR(100),
     phone VARCHAR(20),
@@ -207,6 +211,67 @@ CREATE TABLE IF NOT EXISTS stage_config (
 );
 
 -- ===========================================
+-- 角色表 Role
+-- 系统角色定义（顾问、主管、经理、总监、管理员）
+-- ===========================================
+CREATE TABLE IF NOT EXISTS role (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name VARCHAR(50) NOT NULL UNIQUE,
+    code VARCHAR(50) NOT NULL UNIQUE,
+    level INTEGER NOT NULL DEFAULT 1,
+    data_scope VARCHAR(20) NOT NULL DEFAULT 'self' CHECK(data_scope IN ('self', 'subordinate', 'global')),
+    description VARCHAR(255),
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ===========================================
+-- 权限点表 Permission
+-- 菜单和按钮权限定义
+-- ===========================================
+CREATE TABLE IF NOT EXISTS permission (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code VARCHAR(100) NOT NULL UNIQUE,
+    name VARCHAR(100) NOT NULL,
+    type VARCHAR(20) NOT NULL DEFAULT 'menu' CHECK(type IN ('menu', 'button')),
+    parent_id INTEGER,
+    path VARCHAR(255),
+    icon VARCHAR(100),
+    sort_order INTEGER DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (parent_id) REFERENCES permission(id)
+);
+
+-- ===========================================
+-- 用户角色关联表 UserRole
+-- 用户与角色的多对多关系
+-- ===========================================
+CREATE TABLE IF NOT EXISTS user_role (
+    user_id INTEGER NOT NULL,
+    role_id INTEGER NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, role_id),
+    FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE,
+    FOREIGN KEY (role_id) REFERENCES role(id) ON DELETE CASCADE
+);
+
+-- ===========================================
+-- 角色权限关联表 RolePermission
+-- 角色与权限的多对多关系
+-- ===========================================
+CREATE TABLE IF NOT EXISTS role_permission (
+    role_id INTEGER NOT NULL,
+    permission_id INTEGER NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (role_id, permission_id),
+    FOREIGN KEY (role_id) REFERENCES role(id) ON DELETE CASCADE,
+    FOREIGN KEY (permission_id) REFERENCES permission(id) ON DELETE CASCADE
+);
+
+-- ===========================================
 -- 索引
 -- ===========================================
 CREATE INDEX IF NOT EXISTS idx_candidate_last_operator ON candidate(last_operator_id);
@@ -221,9 +286,18 @@ CREATE INDEX IF NOT EXISTS idx_interview_business_line ON interview(business_lin
 CREATE INDEX IF NOT EXISTS idx_interview_current_status ON interview(current_status);
 CREATE INDEX IF NOT EXISTS idx_interview_round_interview ON interview_round(interview_id);
 CREATE INDEX IF NOT EXISTS idx_interview_round_stage_code ON interview_round(stage_code);
-CREATE INDEX IF NOT EXISTS idx_user_role ON user(role);
+
 CREATE INDEX IF NOT EXISTS idx_business_line_is_active ON business_line(is_active);
 CREATE INDEX IF NOT EXISTS idx_stage_config_module ON stage_config(module);
+CREATE INDEX IF NOT EXISTS idx_role_code ON role(code);
+CREATE INDEX IF NOT EXISTS idx_role_level ON role(level);
+CREATE INDEX IF NOT EXISTS idx_permission_code ON permission(code);
+CREATE INDEX IF NOT EXISTS idx_permission_type ON permission(type);
+CREATE INDEX IF NOT EXISTS idx_permission_parent_id ON permission(parent_id);
+CREATE INDEX IF NOT EXISTS idx_user_role_user_id ON user_role(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_role_role_id ON user_role(role_id);
+CREATE INDEX IF NOT EXISTS idx_role_permission_role_id ON role_permission(role_id);
+CREATE INDEX IF NOT EXISTS idx_role_permission_permission_id ON role_permission(permission_id);
 
 -- ===========================================
 -- 初始化数据（默认配置）
@@ -236,6 +310,55 @@ INSERT OR IGNORE INTO stage_config (module, stages, stage_names, created_at, upd
     ('test_management', '["test_declare", "test_complete"]', '{"test_declare":"韧测申报","test_complete":"韧测完成"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     ('interview_management', '["recommend_interview", "qualification_interview", "tech_interview_1", "tech_interview_2", "manager_interview", "approval", "offer", "pending_onboarding"]', '{"recommend_interview":"推荐面试","qualification_interview":"资面安排","tech_interview_1":"技术面试(一)","tech_interview_2":"技术面试(二)","manager_interview":"主管面试","approval":"租用审批","offer":"Offer","pending_onboarding":"待入职"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
     ('employee_management', '["pending_onboarding", "entry", "leave"]', '{"pending_onboarding":"待入职","entry":"入职","leave":"离职"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- ===========================================
+-- 默认角色初始化
+-- ===========================================
+INSERT OR IGNORE INTO role (name, code, level, data_scope, description, created_at, updated_at) VALUES
+    ('顾问', 'consultant', 1, 'self', '只能看到自己录入的候选人', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('主管', 'supervisor', 2, 'subordinate', '能看到自己和下属顾问的数据', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('经理', 'manager', 3, 'subordinate', '能看到自己和下属主管、顾问的数据', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('总监', 'director', 4, 'subordinate', '能看到所有下级数据', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('管理员', 'admin', 5, 'global', '能看到所有数据，拥有全部权限', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- ===========================================
+-- 默认权限点初始化
+-- ===========================================
+INSERT OR IGNORE INTO permission (code, name, type, path, icon, sort_order, created_at, updated_at) VALUES
+    ('menu_dashboard', '仪表盘', 'menu', '/', 'el-icon-home', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('menu_candidates', '候选录入', 'menu', '/candidates', 'el-icon-user-plus', 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('menu_exam', '机考管理', 'menu', '/exam-stage', 'el-icon-edit', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('menu_test', '韧测管理', 'menu', '/test-stage', 'el-icon-bar-chart', 4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('menu_interview', '面试管理', 'menu', '/interview-stage', 'el-icon-suitcase', 5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('menu_employee', '员工管理', 'menu', '/employee-management', 'el-icon-users', 6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('menu_statistics', '统计报表', 'menu', '', 'el-icon-pie-chart', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('menu_statistics_data', '数据统计', 'menu', '/statistics', '', 71, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('menu_statistics_duration', '停留分析', 'menu', '/duration-analysis', '', 72, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('menu_statistics_records', '停留明细', 'menu', '/duration-records', '', 73, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('menu_users', '用户管理', 'menu', '/settings/users', 'el-icon-user', 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('menu_business_lines', '业务线管理', 'menu', '/settings/business-lines', 'el-icon-office-building', 11, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('menu_exam_papers', '试卷管理', 'menu', '/settings/exam-papers', 'el-icon-file-text', 12, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('menu_stage_config', '阶段配置', 'menu', '/stage-config', 'el-icon-setting', 13, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('menu_role_management', '角色管理', 'menu', '/settings/roles', 'el-icon-key', 14, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('menu_permission_management', '权限管理', 'menu', '/settings/permissions', 'el-icon-lock', 15, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('btn_candidate_create', '创建候选人', 'button', NULL, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('btn_candidate_edit', '编辑候选人', 'button', NULL, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('btn_candidate_delete', '删除候选人', 'button', NULL, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('btn_candidate_advance', '推进阶段', 'button', NULL, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('btn_candidate_push_interview', '面推', 'button', NULL, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('btn_user_create', '创建用户', 'button', NULL, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('btn_user_edit', '编辑用户', 'button', NULL, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('btn_user_delete', '删除用户', 'button', NULL, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('btn_business_line_create', '创建业务线', 'button', NULL, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('btn_business_line_edit', '编辑业务线', 'button', NULL, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('btn_business_line_delete', '删除业务线', 'button', NULL, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('btn_role_create', '创建角色', 'button', NULL, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('btn_role_edit', '编辑角色', 'button', NULL, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('btn_role_delete', '删除角色', 'button', NULL, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('btn_permission_assign', '分配权限', 'button', NULL, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('btn_permission_create', '创建权限', 'button', NULL, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('btn_permission_edit', '编辑权限', 'button', NULL, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('btn_permission_delete', '删除权限', 'button', NULL, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
 -- ===========================================
 -- 阶段说明
@@ -262,7 +385,7 @@ INSERT OR IGNORE INTO stage_config (module, stages, stage_names, created_at, upd
 -- 候选录入 → 机考申报 → 机考完成 → 韧测申报 → 韧测完成 → 推荐面试 → 资面安排 → 技术面试(一) → 技术面试(二) → 主管面试 → 租用审批 → Offer → 待入职 → 入职 → 离职
 
 -- ===========================================
--- 核心架构变化说明 (v2.0)
+-- 核心架构变化说明 (v2.1)
 -- ===========================================
 -- 1. 新增 CandidateStage 表：统一管理所有候选人的阶段、顾问关联、阶段历史
 -- 2. 简化 Candidate 表：移除 currentStage、consultantId，仅保留基本信息
@@ -270,6 +393,13 @@ INSERT OR IGNORE INTO stage_config (module, stages, stage_names, created_at, upd
 -- 4. 简化 Interview 表：移除 currentStage、finalStatus，仅保留 currentStatus
 -- 5. 阶段配置模块化：每个模块只配置自己相关的阶段
 -- 6. 统计数据从 CandidateStage 表查询（而非 Candidate 表）
+-- 7. 新增角色和权限系统：
+--    - Role表：定义系统角色（顾问、主管、经理、总监、管理员）
+--    - Permission表：定义权限点（菜单、按钮）
+--    - UserRole表：用户与角色的多对多关联
+--    - RolePermission表：角色与权限的多对多关联
+-- 8. 数据权限分为三种：自己数据(self)、下级数据(subordinate)、全局数据(global)
+-- 9. 用户层级穿透：上级可以查看所有下级的数据
 
 -- ===========================================
 -- 关系图
@@ -301,4 +431,34 @@ INSERT OR IGNORE INTO stage_config (module, stages, stage_names, created_at, upd
 -- Interview <---+---> (one-to-many) InterviewRound
 --
 -- ExamPaper <---+---> (one-to-many) Exam
+-- ===========================================
+
+-- ===========================================
+-- 候选人阶段时间线表 (v2.2)
+-- ===========================================
+-- 用于精确记录每个候选人在每个阶段的进入/离开时间
+-- UNIQUE(candidate_id, stage) 约束保证每个候选人每个阶段只有一条记录
+-- 阶段回退时走 UPDATE 而非 INSERT
+-- recommend_interview 反馈日期约定：left_at = YYYY-MM-DD 18:00:00
+-- ===========================================
+CREATE TABLE IF NOT EXISTS candidate_stage_timeline (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  candidate_id INTEGER NOT NULL,
+  stage VARCHAR(50) NOT NULL,
+  entered_at DATETIME NOT NULL,
+  left_at DATETIME,
+  duration_hours FLOAT,
+  entered_by INTEGER,
+  left_by INTEGER,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(candidate_id, stage),
+  FOREIGN KEY (candidate_id) REFERENCES candidate(id) ON DELETE CASCADE,
+  FOREIGN KEY (entered_by) REFERENCES user(id),
+  FOREIGN KEY (left_by) REFERENCES user(id)
+);
+
+-- 索引加速筛选与聚合
+CREATE INDEX IF NOT EXISTS idx_cst_stage ON candidate_stage_timeline(stage);
+CREATE INDEX IF NOT EXISTS idx_cst_entered_at ON candidate_stage_timeline(entered_at);
 -- ===========================================

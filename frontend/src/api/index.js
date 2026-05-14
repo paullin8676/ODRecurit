@@ -72,7 +72,10 @@ export const statisticsApi = {
   byConsultant: (params) => api.get('/statistics/by-consultant', { params }),
   byStage: (params) => api.get('/statistics/by-stage', { params }),
   processEfficiency: (params) => api.get('/statistics/process-efficiency', { params }),
-  summary: () => api.get('/statistics/summary')
+  summary: () => api.get('/statistics/summary'),
+  getStageDurationRecords: (params) => api.get('/statistics/stage-duration-records', { params }),
+  getStageDurationAgg: (params) => api.get('/statistics/stage-duration-agg', { params }),
+  getCandidateTotalDurations: () => api.get('/statistics/candidate-total-durations')
 }
 
 export const examApi = {

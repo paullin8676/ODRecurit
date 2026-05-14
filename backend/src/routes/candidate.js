@@ -2,6 +2,7 @@
 const express = require('express');
 const { Candidate, User, BusinessLine, ExamPaper, Interview, InterviewRound, Employee, Test, CandidateStage } = require('../models');
 const { authenticate } = require('../middleware/auth');
+const dataPermission = require('../middleware/dataPermission');
 const StageService = require('../services/stageService');
 
 const router = express.Router();
@@ -24,7 +25,7 @@ const STAGES = [
   'leave'
 ];
 
-router.get('/', authenticate, async (req, res, next) => {
+router.get('/', authenticate, dataPermission, async (req, res, next) => {
   try {
     const { name, currentStage, stages, page = 1, pageSize = 20 } = req.query;
     const { Op } = require('sequelize');
@@ -61,6 +62,10 @@ router.get('/', authenticate, async (req, res, next) => {
     if (stages && stages !== '') {
       const stageArray = stages.split(',');
       stageWhere.currentStage = { [Op.in]: stageArray };
+    }
+
+    if (req.consultantIds && req.consultantIds.length > 0) {
+      stageWhere.consultantId = { [Op.in]: req.consultantIds };
     }
 
     if (Object.keys(stageWhere).length > 0) {

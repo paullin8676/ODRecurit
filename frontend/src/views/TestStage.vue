@@ -37,6 +37,11 @@
             {{ row.currentStage ? stageNames[row.currentStage] : '-' }}
           </template>
         </el-table-column>
+        <el-table-column label="负责顾问" width="120">
+          <template #default="{ row }">
+            {{ row.consultantName || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column label="下发日期" width="120">
           <template #default="{ row }">
             <span>{{ row.test?.issueDate ? new Date(row.test.issueDate).toLocaleDateString() : '-' }}</span>
@@ -121,8 +126,8 @@
                   </el-button>
                 </template>
               </template>
-              <!-- 只有当前阶段为韧测完成且韧测通过且没有面试记录时显示面推按钮 -->
-              <template v-if="row.currentStage === 'test_complete' && row.canRecommend && row.test?.currentStatus === 'passed'">
+              <!-- 只有当前阶段为韧测完成且韧测通过且没有面试记录且有权限时显示面推按钮 -->
+              <template v-if="row.currentStage === 'test_complete' && row.canRecommend && row.test?.currentStatus === 'passed' && authStore.hasPermission('btn_candidate_push_interview')">
                 <el-button type="success" link size="small" @click="handlePushInterview(row)">
                   面推
                 </el-button>
@@ -181,6 +186,11 @@
             <el-col :span="12">
               <el-form-item label="身份证号">
                 <el-input :value="selectedEmployee.idCard" :disabled="true" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="负责顾问">
+                <el-input :value="selectedEmployee.consultantName || '-'" :disabled="true" />
               </el-form-item>
             </el-col>
           </el-row>
@@ -249,6 +259,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { candidateApi, testApi, stageConfigApi } from '../api'
 import { ElMessage } from 'element-plus'
 import { Search, Refresh } from '@element-plus/icons-vue'
+import { useAuthStore } from '../stores/auth'
 
 const STAGES = [
   'candidate_entry',
@@ -287,6 +298,7 @@ const stageNames = {
 }
 
 const availableStages = ref([])
+const authStore = useAuthStore()
 
 const filteredStageNames = computed(() => {
   const filtered = {}
@@ -375,6 +387,7 @@ const fetchEmployees = async () => {
         email: item.email,
         idCard: item.idCard,
         currentStage: item.currentStage || '',
+        consultantName: item.consultantName || '-',
         test: item.test,
         canRecommend: canRecommendFlag
       }
@@ -429,7 +442,15 @@ const handlePageSizeChange = (size) => {
 const handleView = async (row) => {
   try {
     const data = await candidateApi.getById(row.id)
-    selectedEmployee.value = data.candidate
+    const candidate = { ...data.candidate }
+    
+    if (data.candidate.consultant) {
+      candidate.consultantName = data.candidate.consultant.realName
+    } else {
+      candidate.consultantName = '-'
+    }
+    
+    selectedEmployee.value = candidate
     
     // Get test data for this candidate
     const testData = await testApi.getByCandidate(row.id)

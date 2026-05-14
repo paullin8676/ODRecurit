@@ -7,8 +7,30 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref(JSON.parse(localStorage.getItem('user') || 'null'))
 
   const isAuthenticated = computed(() => !!token.value)
-  const isManager = computed(() => user.value?.role === 'manager')
-  const isConsultant = computed(() => user.value?.role === 'consultant')
+  const isManager = computed(() => user.value?.roles?.some(r => r.code === 'manager'))
+  const isConsultant = computed(() => user.value?.roles?.every(r => r.code === 'consultant'))
+  
+  const permissions = computed(() => {
+    return user.value?.permissions || []
+  })
+  
+  const roles = computed(() => {
+    return user.value?.roles || []
+  })
+  
+  const dataScope = computed(() => {
+    return user.value?.dataScope || 'self'
+  })
+
+  function hasPermission(permissionCode) {
+    if (!user.value?.permissions) return false
+    return user.value.permissions.some(p => p.code === permissionCode)
+  }
+
+  function hasRole(roleCode) {
+    if (!user.value?.roles) return false
+    return user.value.roles.some(r => r.code === roleCode)
+  }
 
   async function login(username, password) {
     const data = await api.post('/auth/login', { username, password })
@@ -56,6 +78,11 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     isManager,
     isConsultant,
+    permissions,
+    roles,
+    dataScope,
+    hasPermission,
+    hasRole,
     login,
     register,
     fetchCurrentUser,

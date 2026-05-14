@@ -2,16 +2,6 @@
   <div class="page-container">
     <div class="page-header">
       <h2 class="page-title">数据统计</h2>
-      <div class="header-actions">
-        <el-date-picker
-          v-model="dateRange"
-          type="daterange"
-          range-separator="至"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
-          @change="handleDateChange"
-        />
-      </div>
     </div>
 
     <el-row :gutter="20" class="stats-row">
@@ -92,23 +82,6 @@
       </el-col>
       <el-col :span="12">
         <div class="card-container">
-          <h3 class="card-title">流程效率统计 (平均天数)</h3>
-          <el-table :data="efficiencyData" style="width: 100%">
-            <el-table-column prop="stage" label="阶段" />
-            <el-table-column prop="avgDays" label="平均天数" width="120">
-              <template #default="{ row }">
-                <span style="color: #409eff; font-weight: 600">{{ row.avgDays }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="count" label="样本数" width="100" />
-          </el-table>
-        </div>
-      </el-col>
-    </el-row>
-
-    <el-row :gutter="20" style="margin-top: 20px">
-      <el-col :span="24">
-        <div class="card-container">
           <h3 class="card-title">顾问候选人统计</h3>
           <div ref="consultantChartRef" style="height: 300px"></div>
         </div>
@@ -118,18 +91,16 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { statisticsApi } from '../api'
 import * as echarts from 'echarts'
 import { User, CircleCheck, Document, Avatar } from '@element-plus/icons-vue'
 
-const dateRange = ref([])
 const summary = ref({})
 const byStage = ref([])
-const efficiencyData = ref([])
+
 const stageChartRef = ref()
 const consultantChartRef = ref()
-
 let stageChart = null
 let consultantChart = null
 
@@ -149,10 +120,6 @@ const stageNames = {
   pending_onboarding: '待入职',
   entry: '入职',
   leave: '离职'
-}
-
-const handleDateChange = () => {
-  fetchData()
 }
 
 const initStageChart = () => {
@@ -256,29 +223,14 @@ const initConsultantChart = (consultantStats) => {
 const fetchData = async () => {
   try {
     const params = {}
-    if (dateRange.value && dateRange.value.length === 2) {
-      params.startDate = dateRange.value[0].toISOString()
-      params.endDate = dateRange.value[1].toISOString()
-    }
-
-    const [summaryRes, stageRes, efficiencyRes, consultantRes] = await Promise.all([
+    const [summaryRes, stageRes, consultantRes] = await Promise.all([
       statisticsApi.summary(),
       statisticsApi.byStage(params),
-      statisticsApi.processEfficiency(params),
       statisticsApi.byConsultant(params)
     ])
 
     summary.value = summaryRes.summary
     byStage.value = stageRes.statistics || []
-
-    const effStats = efficiencyRes.statistics
-    efficiencyData.value = [
-      { stage: '候选录入→机考申报', ...effStats.candidateToExam },
-      { stage: '机考申报→机考完成', ...effStats.examDeclareToComplete },
-      { stage: '推荐面试→资面安排', ...effStats.recommendToQualification },
-      { stage: '前置阶段整体', ...effStats.preStageTotal },
-      { stage: '面试阶段整体', ...effStats.interviewStageTotal }
-    ]
 
     setTimeout(() => {
       initStageChart()
@@ -306,11 +258,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.header-actions {
-  display: flex;
-  gap: 10px;
-}
-
 .stats-row {
   margin-bottom: 20px;
 }

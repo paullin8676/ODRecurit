@@ -37,6 +37,11 @@
             {{ row.currentStage ? stageNames[row.currentStage] : '-' }}
           </template>
         </el-table-column>
+        <el-table-column label="负责顾问" width="120">
+          <template #default="{ row }">
+            {{ row.consultantName || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column label="入职日期" width="120">
           <template #default="{ row }">
             {{ row.employeeEntryDate ? new Date(row.employeeEntryDate).toLocaleDateString() : '-' }}
@@ -965,7 +970,7 @@ const canViewBusinessLine = () => {
     return false
   }
 
-  if (currentUser.value.role === 'manager') {
+  if (currentUser.value.roles?.some(r => r.code === 'manager' || r.level >= 3)) {
     return true
   }
 
@@ -992,7 +997,7 @@ const canEditBusinessLine = () => {
 
   const currentUserId = currentUser.value.id
 
-  if (currentUser.value.role === 'manager') {
+  if (currentUser.value.roles?.some(r => r.code === 'manager' || r.level >= 3)) {
     return true
   }
 
@@ -1011,7 +1016,7 @@ const filteredBusinessLines = computed(() => {
     return businessLines.value
   }
 
-  if (currentUser.value.role === 'manager') {
+  if (currentUser.value.roles?.some(r => r.code === 'manager' || r.level >= 3)) {
     return businessLines.value
   }
 

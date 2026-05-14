@@ -13,6 +13,10 @@ const testRoutes = require('./routes/test');
 const interviewRoutes = require('./routes/interview');
 const statisticsRoutes = require('./routes/statistics');
 const stageConfigRoutes = require('./routes/stageConfig');
+const roleRoutes = require('./routes/role');
+const permissionRoutes = require('./routes/permission');
+const userRoleRoutes = require('./routes/userRole');
+const rolePermissionRoutes = require('./routes/rolePermission');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -32,6 +36,10 @@ app.use('/api/tests', testRoutes);
 app.use('/api/interviews', interviewRoutes);
 app.use('/api/statistics', statisticsRoutes);
 app.use('/api/stage-configs', stageConfigRoutes);
+app.use('/api/roles', roleRoutes);
+app.use('/api/permissions', permissionRoutes);
+app.use('/api/user-roles', userRoleRoutes);
+app.use('/api/role-permissions', rolePermissionRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
