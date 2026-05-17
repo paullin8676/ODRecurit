@@ -28,10 +28,6 @@
                 end-placeholder="结束日期"
                 size="small"
               />
-              <el-select v-model="filterStage" placeholder="选择阶段" clearable size="small" style="width: 130px">
-                <el-option label="全部阶段" value="" />
-                <el-option v-for="(name, code) in stageNames" :key="code" :label="name" :value="code" />
-              </el-select>
             </div>
           </div>
           <div ref="durationChartRef" style="height: 350px"></div>
@@ -115,7 +111,6 @@ import { statisticsApi } from '../api'
 import * as echarts from 'echarts'
 
 const dateRange = ref([])
-const filterStage = ref('')
 const quickRangeType = ref(null)
 const candidateNameFilter = ref('')
 const totalDurationRecords = ref([])
@@ -386,9 +381,6 @@ const fetchDurationAgg = async () => {
       params.startDate = toLocalDateString(dateRange.value[0])
       params.endDate = toLocalDateString(dateRange.value[1])
     }
-    if (filterStage.value) {
-      params.stage = filterStage.value
-    }
 
     const rsp = await statisticsApi.getStageDurationAgg(params)
     aggregations.value = rsp.aggregations || []
@@ -439,12 +431,12 @@ const handleResize = () => {
   flowTrendChart?.resize()
 }
 
-watch([dateRange, filterStage], () => {
+watch(dateRange, () => {
   fetchDurationAgg()
 }, { deep: true })
 
 onMounted(() => {
-  fetchDurationAgg()
+  setQuickRange(7)
   fetchStageTrend(7)
   fetchFlowTrend(7)
   fetchTotalDurations()
