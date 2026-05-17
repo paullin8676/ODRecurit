@@ -39,7 +39,7 @@
       <el-col :span="24">
         <div class="card-container">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px">
-            <h3 class="card-title" style="margin: 0">阶段停留时间变化趋势</h3>
+            <h3 class="card-title" style="margin: 0">每天各完成阶段所需平均天数变化趋势</h3>
             <el-button-group>
               <el-button size="small" :type="stageTrendDays === 7 ? 'primary' : 'default'" @click="fetchStageTrend(7)">最近一周</el-button>
               <el-button size="small" :type="stageTrendDays === 14 ? 'primary' : 'default'" @click="fetchStageTrend(14)">最近两周</el-button>
