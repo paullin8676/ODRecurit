@@ -9,7 +9,7 @@
         <div class="card-container">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px">
             <div style="display: flex; align-items: center; gap: 10px">
-              <h3 class="card-title" style="margin: 0">某时间段内阶段停留平均天数分析</h3>
+              <h3 class="card-title" style="margin: 0">某时间段内各阶段完成平均天数统计</h3>
               <el-tag type="warning" v-if="aggregations.length > 0">
                 卡点预警: {{ bottleneckStage }}
               </el-tag>
