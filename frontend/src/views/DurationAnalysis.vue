@@ -222,7 +222,11 @@ const initDurationChart = () => {
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'shadow' },
-      formatter: (params) => params.name + ': ' + toFixed2(params.value) + ' 天'
+      formatter: (params) => {
+        const p = Array.isArray(params) ? params[0] : params
+        const v = p.data?.value !== undefined ? p.data.value : p.value
+        return p.name + ': ' + toFixed2(v) + ' 天'
+      }
     },
     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
     xAxis: {
@@ -255,7 +259,10 @@ const initDurationChart = () => {
         label: {
           show: true,
           position: 'top',
-          formatter: (params) => toFixed2(params.value) + '天'
+          formatter: (params) => {
+            const v = params.data?.value !== undefined ? params.data.value : params.value
+            return toFixed2(v) + '天'
+          }
         }
       }
     ]
