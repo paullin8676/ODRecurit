@@ -220,7 +220,7 @@ const initDurationChart = () => {
       formatter: (params) => {
         const p = Array.isArray(params) ? params[0] : params
         const v = p.data?.value !== undefined ? p.data.value : p.value
-        return p.name + ': ' + toFixed2(v) + ' 天'
+        return '平均天数: ' + toFixed2(v) + ' 天'
       }
     },
     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
