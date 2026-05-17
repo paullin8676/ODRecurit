@@ -497,57 +497,65 @@ WITH RECURSIVE dates(date) AS (
 all_stages AS (
     SELECT DISTINCT stage FROM candidate_stage_timeline WHERE stage IS NOT NULL
 ),
-date_stage_candidates AS (
+daily_stats AS (
+    WITH date_stage_candidates AS (
+        SELECT 
+            d.date as trend_date,
+            s.stage,
+            t.candidate_id,
+            entry.entered_at as entry_entered_at,
+            t.entered_at as stage_entered_at,
+            t.left_at as stage_left_at
+        FROM dates d
+        CROSS JOIN all_stages s
+        INNER JOIN candidate_stage_timeline t 
+            ON t.stage = s.stage
+            AND (
+                 DATE(datetime(t.left_at, '+8 hours')) = d.date 
+                 OR 
+                 (t.left_at IS NULL AND DATE(datetime(t.entered_at, '+8 hours')) <= d.date)
+                 OR
+                 (DATE(datetime(t.entered_at, '+8 hours')) <= d.date AND d.date < DATE(datetime(t.left_at, '+8 hours')))
+            )
+        INNER JOIN candidate c ON t.candidate_id = c.id
+        INNER JOIN candidate_stage_timeline entry 
+            ON entry.candidate_id = t.candidate_id 
+            AND entry.stage = 'candidate_entry'
+            AND d.date >= DATE(datetime(entry.entered_at, '+8 hours'))
+    )
     SELECT 
-        d.date as trend_date,
-        s.stage,
-        t.candidate_id,
-        entry.entered_at as entry_entered_at,
-        t.entered_at as stage_entered_at,
-        t.left_at as stage_left_at
-    FROM dates d
-    CROSS JOIN all_stages s
-    INNER JOIN candidate_stage_timeline t 
-        ON t.stage = s.stage
-        AND (
-             DATE(datetime(t.left_at, '+8 hours')) = d.date 
-             OR 
-             (t.left_at IS NULL AND DATE(datetime(t.entered_at, '+8 hours')) <= d.date)
-             OR
-             (DATE(datetime(t.entered_at, '+8 hours')) <= d.date AND d.date < DATE(datetime(t.left_at, '+8 hours')))
-        )
-    INNER JOIN candidate c ON t.candidate_id = c.id
-    INNER JOIN candidate_stage_timeline entry 
-        ON entry.candidate_id = t.candidate_id 
-        AND entry.stage = 'candidate_entry'
-        AND d.date >= DATE(datetime(entry.entered_at, '+8 hours'))
+        trend_date,
+        stage,
+        AVG(
+            CAST(
+              julianday(
+                CASE
+                  WHEN stage_left_at IS NULL THEN IIF(trend_date = date(datetime('now', '+8 hours')), datetime('now'), datetime(datetime(trend_date, '+1 day', '-1 second'), '-8 hours'))
+                  WHEN DATE(datetime(stage_left_at, '+8 hours')) = trend_date THEN stage_left_at
+                  WHEN DATE(datetime(stage_entered_at, '+8 hours')) <= trend_date AND trend_date < DATE(datetime(stage_left_at, '+8 hours')) 
+                    THEN IIF(trend_date = date(datetime('now', '+8 hours')), datetime('now'), datetime(datetime(trend_date, '+1 day', '-1 second'), '-8 hours'))
+                  ELSE IIF(trend_date = date(datetime('now', '+8 hours')), datetime('now'), datetime(datetime(trend_date, '+1 day', '-1 second'), '-8 hours'))
+                END
+              ) 
+              - julianday(entry_entered_at) 
+            AS REAL)
+        ) as avg_total_days
+    FROM date_stage_candidates
+    GROUP BY trend_date, stage
 )
 SELECT 
-    trend_date,
-    stage,
-    COUNT(DISTINCT candidate_id) as candidate_count,
-    AVG(
-        CAST(
-          julianday(
-            CASE
-              WHEN stage_left_at IS NULL THEN IIF(trend_date = date(datetime('now', '+8 hours')), datetime('now'), datetime(datetime(trend_date, '+1 day', '-1 second'), '-8 hours'))
-              WHEN DATE(datetime(stage_left_at, '+8 hours')) = trend_date THEN stage_left_at
-              WHEN DATE(datetime(stage_entered_at, '+8 hours')) <= trend_date AND trend_date < DATE(datetime(stage_left_at, '+8 hours')) 
-                THEN IIF(trend_date = date(datetime('now', '+8 hours')), datetime('now'), datetime(datetime(trend_date, '+1 day', '-1 second'), '-8 hours'))
-              ELSE IIF(trend_date = date(datetime('now', '+8 hours')), datetime('now'), datetime(datetime(trend_date, '+1 day', '-1 second'), '-8 hours'))
-            END
-          ) 
-          - julianday(entry_entered_at) 
-        AS REAL)
-    ) as avg_total_days
-FROM date_stage_candidates
-GROUP BY trend_date, stage
-ORDER BY trend_date ASC, stage ASC
+    d.date as trend_date,
+    s.stage,
+    COALESCE(ds.avg_total_days, 0) as avg_total_days
+FROM dates d
+CROSS JOIN all_stages s
+LEFT JOIN daily_stats ds 
+    ON ds.trend_date = d.date 
+   AND ds.stage = s.stage
+ORDER BY d.date ASC, s.stage ASC
     `;
     const [rows] = await sequelize.query(sql);
-    
 
-    
     const stageNames = {
       candidate_entry: '候选录入',
       exam_declare: '机考申报',
