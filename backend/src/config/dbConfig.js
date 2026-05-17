@@ -6,6 +6,7 @@ const dbConfig = {
   dialect: process.env.DB_DIALECT || 'sqlite',
   storage: process.env.DB_PATH || path.join(__dirname, '../../database.sqlite'),
   logging: process.env.NODE_ENV === 'development' ? console.log : false,
+
   pool: {
     max: 5,
     min: 0,

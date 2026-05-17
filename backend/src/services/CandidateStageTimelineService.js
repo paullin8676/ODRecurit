@@ -11,6 +11,14 @@ class CandidateStageTimelineService {
     return Math.round((diffMs / 3600000) * 100) / 100;
   }
 
+  static toLocalDateString(d) {
+    const pad = (n) => n.toString().padStart(2, '0');
+    const Y = d.getFullYear();
+    const M = pad(d.getMonth() + 1);
+    const D = pad(d.getDate());
+    return `${Y}-${M}-${D}`;
+  }
+
   static async enterStage(candidateId, stage, userId = null, transaction = null) {
     const now = new Date();
     const options = transaction ? { transaction } : {};
@@ -105,25 +113,53 @@ class CandidateStageTimelineService {
     });
   }
 
-  static async getDurationRecords({ startDate, endDate, stage, page, pageSize, name }) {
+  static async getDurationRecords({ startDate, endDate, leaveStartDate, leaveEndDate, stage, page, pageSize, name, sortField, sortOrder, stages }) {
     const params = [];
     let whereConditions = ['1=1'];
 
-    if (startDate) {
-      whereConditions.push('t.entered_at >= ?');
-      params.push(new Date(startDate));
+    if (startDate && endDate) {
+      whereConditions.push('(DATE(datetime(t.entered_at, \'+8 hours\')) >= ? AND DATE(datetime(t.entered_at, \'+8 hours\')) <= ?)');
+      params.push(startDate, endDate);
+    } else if (startDate) {
+      whereConditions.push('DATE(datetime(t.entered_at, \'+8 hours\')) >= ?');
+      params.push(startDate);
+    } else if (endDate) {
+      whereConditions.push('DATE(datetime(t.entered_at, \'+8 hours\')) <= ?');
+      params.push(endDate);
     }
-    if (endDate) {
-      whereConditions.push('t.entered_at <= ?');
-      params.push(new Date(endDate));
+    if (leaveStartDate && leaveEndDate) {
+      whereConditions.push('t.left_at IS NOT NULL AND DATE(datetime(t.left_at, \'+8 hours\')) >= ? AND DATE(datetime(t.left_at, \'+8 hours\')) <= ?');
+      params.push(leaveStartDate, leaveEndDate);
+    } else if (leaveStartDate) {
+      whereConditions.push('t.left_at IS NOT NULL AND DATE(datetime(t.left_at, \'+8 hours\')) >= ?');
+      params.push(leaveStartDate);
+    } else if (leaveEndDate) {
+      whereConditions.push('t.left_at IS NOT NULL AND DATE(datetime(t.left_at, \'+8 hours\')) <= ?');
+      params.push(leaveEndDate);
     }
     if (stage) {
       whereConditions.push('t.stage = ?');
       params.push(stage);
     }
+    if (stages) {
+      const stagesArr = stages.split(',').map(s => s.trim()).filter(s => s);
+      if (stagesArr.length === 1) {
+        whereConditions.push('t.stage = ?');
+        params.push(stagesArr[0]);
+      } else if (stagesArr.length > 1) {
+        const marks = stagesArr.map(() => '?').join(',');
+        whereConditions.push(`t.stage IN (${marks})`);
+        stagesArr.forEach(s => params.push(s));
+      }
+    }
     if (name) {
-      whereConditions.push('c.name LIKE ?');
-      params.push(`%${name}%`);
+      const separators = /[\s,\u3001\uff0c]+/;
+      const nameParts = name.trim().split(separators).filter(n => n && n.trim());
+      if (nameParts.length > 0) {
+        const nameConds = nameParts.map(() => 'c.name LIKE ?').join(' OR ');
+        whereConditions.push(`(${nameConds})`);
+        nameParts.forEach(n => params.push(`%${n.trim()}%`));
+      }
     }
 
     const whereClause = whereConditions.join(' AND ');
@@ -138,6 +174,31 @@ class CandidateStageTimelineService {
     `;
     const [countResult] = await sequelize.query(countSql, { replacements: params });
     const total = parseInt(countResult[0].total);
+
+    let orderBy = 'ORDER BY t.entered_at DESC';
+    if (sortField === 'durationHours' && sortOrder) {
+      const direction = sortOrder === 'ascending' ? 'ASC' : 'DESC';
+      orderBy = `ORDER BY t.duration_hours ${direction} NULLS LAST`;
+    } else if (sortField === 'candidateName' && sortOrder) {
+      const direction = sortOrder === 'ascending' ? 'ASC' : 'DESC';
+      orderBy = `ORDER BY c.name ${direction}, CASE t.stage
+        WHEN 'candidate_entry' THEN 0
+        WHEN 'exam_declare' THEN 1
+        WHEN 'exam_complete' THEN 2
+        WHEN 'test_declare' THEN 3
+        WHEN 'test_complete' THEN 4
+        WHEN 'recommend_interview' THEN 5
+        WHEN 'qualification_interview' THEN 6
+        WHEN 'tech_interview_1' THEN 7
+        WHEN 'tech_interview_2' THEN 8
+        WHEN 'manager_interview' THEN 9
+        WHEN 'approval' THEN 10
+        WHEN 'offer' THEN 11
+        WHEN 'pending_onboarding' THEN 12
+        WHEN 'entry' THEN 13
+        WHEN 'leave' THEN 14
+        ELSE 99 END ASC`;
+    }
 
     const dataSql = `
       SELECT 
@@ -156,7 +217,7 @@ class CandidateStageTimelineService {
       LEFT JOIN candidate_stage cs ON t.candidate_id = cs.candidate_id
       LEFT JOIN user u ON cs.consultant_id = u.id
       WHERE ${whereClause}
-      ORDER BY t.entered_at DESC
+      ${orderBy}
       LIMIT ? OFFSET ?
     `;
     const dataParams = [...params, parseInt(pageSize), (page - 1) * pageSize];
@@ -327,6 +388,221 @@ class CandidateStageTimelineService {
         candidateEntryDate: entryDate
       };
     }).sort((a, b) => b.totalDays - a.totalDays);
+  }
+
+  static async getStageTrend({ periodDays }) {
+    const endDate = new Date();
+    const startDate = new Date();
+    const days = parseInt(periodDays || 7);
+    startDate.setDate(endDate.getDate() - (days - 1));
+    const startStr = this.toLocalDateString(startDate);
+    const endStr = this.toLocalDateString(endDate);
+
+    const sql = `
+WITH RECURSIVE dates(date) AS (
+    SELECT '${startStr}'
+    UNION ALL
+    SELECT date(date, '+1 day') FROM dates WHERE date < '${endStr}'
+),
+all_stages AS (
+    SELECT DISTINCT stage FROM candidate_stage_timeline WHERE stage IS NOT NULL
+),
+date_stage_candidates AS (
+    SELECT 
+        d.date as trend_date,
+        s.stage,
+        t.candidate_id,
+        CASE 
+          WHEN t.duration_hours IS NOT NULL THEN t.duration_hours
+          ELSE 
+            (julianday(
+              IIF(d.date = date(datetime('now', '+8 hours')), datetime('now'), datetime(datetime(d.date, '+1 day', '-1 second'), '-8 hours'))
+            ) - julianday(t.entered_at)) * 24
+        END as stage_duration_hours
+    FROM dates d
+    CROSS JOIN all_stages s
+    INNER JOIN candidate_stage_timeline t 
+        ON t.stage = s.stage
+        AND (
+             DATE(datetime(t.left_at, '+8 hours')) = d.date 
+             OR 
+             (t.left_at IS NULL AND DATE(datetime(t.entered_at, '+8 hours')) <= d.date)
+             OR
+             (DATE(datetime(t.entered_at, '+8 hours')) <= d.date AND d.date < DATE(datetime(t.left_at, '+8 hours')))
+        )
+    INNER JOIN candidate c ON t.candidate_id = c.id
+)
+SELECT 
+    trend_date,
+    stage,
+    COUNT(DISTINCT candidate_id) as candidate_count,
+    AVG(stage_duration_hours) as avg_hours
+FROM date_stage_candidates
+GROUP BY trend_date, stage
+ORDER BY trend_date ASC, stage ASC
+    `;
+    const [rows] = await sequelize.query(sql);
+    
+    const stageNames = {
+      candidate_entry: '候选录入',
+      exam_declare: '机考申报',
+      exam_complete: '机考完成',
+      test_declare: '韧测申报',
+      test_complete: '韧测完成',
+      recommend_interview: '推荐面试',
+      qualification_interview: '资面安排',
+      tech_interview_1: '技术面试(一)',
+      tech_interview_2: '技术面试(二)',
+      manager_interview: '主管面试',
+      approval: '租用审批',
+      offer: 'Offer',
+      pending_onboarding: '待入职',
+      entry: '入职',
+      leave: '离职'
+    };
+
+    const datesSet = new Set();
+    const dataMap = {};
+    for (const r of rows) {
+      const d = String(r.trend_date).split('T')[0];
+      datesSet.add(d);
+      const sname = stageNames[r.stage] || r.stage;
+      if (!dataMap[sname]) dataMap[sname] = {};
+      dataMap[sname][d] = Math.round((parseFloat(r.avg_hours) / 24) * 100) / 100;
+    }
+    const dates = Array.from(datesSet).sort();
+    
+    const stageOrder = ['candidate_entry', 'exam_declare', 'exam_complete', 'test_declare', 'test_complete',
+                        'recommend_interview', 'qualification_interview', 'tech_interview_1', 'tech_interview_2',
+                        'manager_interview', 'approval', 'offer', 'pending_onboarding', 'entry', 'leave'];
+    
+    const series = [];
+    for (const stageKey of stageOrder) {
+      const stageName = stageNames[stageKey];
+      if (stageName && dataMap[stageName]) {
+        const data = [];
+        for (const d of dates) {
+          data.push(dataMap[stageName][d] || 0);
+        }
+        series.push({ name: stageName, data });
+      }
+    }
+    return { dates, series };
+  }
+
+  static async getTotalFlowTrend({ periodDays }) {
+    const endDate = new Date();
+    const startDate = new Date();
+    const days = parseInt(periodDays || 7);
+    startDate.setDate(endDate.getDate() - (days - 1));
+    const startStr = this.toLocalDateString(startDate);
+    const endStr = this.toLocalDateString(endDate);
+
+    const sql = `
+WITH RECURSIVE dates(date) AS (
+    SELECT '${startStr}'
+    UNION ALL
+    SELECT date(date, '+1 day') FROM dates WHERE date < '${endStr}'
+),
+all_stages AS (
+    SELECT DISTINCT stage FROM candidate_stage_timeline WHERE stage IS NOT NULL
+),
+date_stage_candidates AS (
+    SELECT 
+        d.date as trend_date,
+        s.stage,
+        t.candidate_id,
+        entry.entered_at as entry_entered_at,
+        t.entered_at as stage_entered_at,
+        t.left_at as stage_left_at
+    FROM dates d
+    CROSS JOIN all_stages s
+    INNER JOIN candidate_stage_timeline t 
+        ON t.stage = s.stage
+        AND (
+             DATE(datetime(t.left_at, '+8 hours')) = d.date 
+             OR 
+             (t.left_at IS NULL AND DATE(datetime(t.entered_at, '+8 hours')) <= d.date)
+             OR
+             (DATE(datetime(t.entered_at, '+8 hours')) <= d.date AND d.date < DATE(datetime(t.left_at, '+8 hours')))
+        )
+    INNER JOIN candidate c ON t.candidate_id = c.id
+    INNER JOIN candidate_stage_timeline entry 
+        ON entry.candidate_id = t.candidate_id 
+        AND entry.stage = 'candidate_entry'
+        AND d.date >= DATE(datetime(entry.entered_at, '+8 hours'))
+)
+SELECT 
+    trend_date,
+    stage,
+    COUNT(DISTINCT candidate_id) as candidate_count,
+    AVG(
+        CAST(
+          julianday(
+            CASE
+              WHEN stage_left_at IS NULL THEN IIF(trend_date = date(datetime('now', '+8 hours')), datetime('now'), datetime(datetime(trend_date, '+1 day', '-1 second'), '-8 hours'))
+              WHEN DATE(datetime(stage_left_at, '+8 hours')) = trend_date THEN stage_left_at
+              WHEN DATE(datetime(stage_entered_at, '+8 hours')) <= trend_date AND trend_date < DATE(datetime(stage_left_at, '+8 hours')) 
+                THEN IIF(trend_date = date(datetime('now', '+8 hours')), datetime('now'), datetime(datetime(trend_date, '+1 day', '-1 second'), '-8 hours'))
+              ELSE IIF(trend_date = date(datetime('now', '+8 hours')), datetime('now'), datetime(datetime(trend_date, '+1 day', '-1 second'), '-8 hours'))
+            END
+          ) 
+          - julianday(entry_entered_at) 
+        AS REAL)
+    ) as avg_total_days
+FROM date_stage_candidates
+GROUP BY trend_date, stage
+ORDER BY trend_date ASC, stage ASC
+    `;
+    const [rows] = await sequelize.query(sql);
+    
+
+    
+    const stageNames = {
+      candidate_entry: '候选录入',
+      exam_declare: '机考申报',
+      exam_complete: '机考完成',
+      test_declare: '韧测申报',
+      test_complete: '韧测完成',
+      recommend_interview: '推荐面试',
+      qualification_interview: '资面安排',
+      tech_interview_1: '技术面试(一)',
+      tech_interview_2: '技术面试(二)',
+      manager_interview: '主管面试',
+      approval: '租用审批',
+      offer: 'Offer',
+      pending_onboarding: '待入职',
+      entry: '入职',
+      leave: '离职'
+    };
+
+    const datesSet = new Set();
+    const dataMap = {};
+    for (const r of rows) {
+      const d = String(r.trend_date).split('T')[0];
+      datesSet.add(d);
+      const sname = stageNames[r.stage] || r.stage;
+      if (!dataMap[sname]) dataMap[sname] = {};
+      dataMap[sname][d] = Math.round(parseFloat(r.avg_total_days) * 100) / 100;
+    }
+    const dates = Array.from(datesSet).sort();
+    
+    const stageOrder = ['candidate_entry', 'exam_declare', 'exam_complete', 'test_declare', 'test_complete',
+                        'recommend_interview', 'qualification_interview', 'tech_interview_1', 'tech_interview_2',
+                        'manager_interview', 'approval', 'offer', 'pending_onboarding', 'entry', 'leave'];
+    
+    const series = [];
+    for (const stageKey of stageOrder) {
+      const stageName = stageNames[stageKey];
+      if (stageName && dataMap[stageName]) {
+        const data = [];
+        for (const d of dates) {
+          data.push(dataMap[stageName][d] || 0);
+        }
+        series.push({ name: stageName, data });
+      }
+    }
+    return { dates, series };
   }
 }
 

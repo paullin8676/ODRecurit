@@ -75,7 +75,9 @@ export const statisticsApi = {
   summary: () => api.get('/statistics/summary'),
   getStageDurationRecords: (params) => api.get('/statistics/stage-duration-records', { params }),
   getStageDurationAgg: (params) => api.get('/statistics/stage-duration-agg', { params }),
-  getCandidateTotalDurations: () => api.get('/statistics/candidate-total-durations')
+  getCandidateTotalDurations: () => api.get('/statistics/candidate-total-durations'),
+  getStageTrend: (params) => api.get('/statistics/stage-trend', { params }),
+  getTotalFlowTrend: (params) => api.get('/statistics/total-flow-trend', { params })
 }
 
 export const examApi = {

@@ -5,27 +5,45 @@
       <div class="header-actions">
         <el-input
           v-model="candidateNameFilter"
-          placeholder="输入候选人姓名搜索"
+          placeholder="姓名：空格/逗号分隔多个"
           clearable
-          style="width: 200px"
+          style="width: 220px"
         />
-        <el-date-picker
-          v-model="dateRange"
-          type="daterange"
-          range-separator="至"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
-        />
-        <el-select v-model="filterStage" placeholder="选择阶段" clearable style="width: 150px">
-          <el-option label="全部阶段" value="" />
+        <div class="filter-item">
+          <el-icon class="filter-icon"><Timer /></el-icon>
+          <el-date-picker
+            v-model="enterDateRange"
+            type="daterange"
+            range-separator="至"
+            start-placeholder="进入始"
+            end-placeholder="进入止"
+            size="small"
+            style="width: 205px"
+            @change="debouncedFetch"
+          />
+        </div>
+        <div class="filter-item">
+          <el-icon class="filter-icon"><SwitchButton /></el-icon>
+          <el-date-picker
+            v-model="leaveDateRange"
+            type="daterange"
+            range-separator="至"
+            start-placeholder="离开始"
+            end-placeholder="离开止"
+            size="small"
+            style="width: 205px"
+            @change="debouncedFetch"
+          />
+        </div>
+        <el-select v-model="filterStages" multiple placeholder="选择阶段（可多选）" clearable style="width: 220px">
           <el-option v-for="(name, code) in stageNames" :key="code" :label="name" :value="code" />
         </el-select>
       </div>
     </div>
 
     <div class="card-container">
-      <el-table :data="durationRecords" style="width: 100%" stripe v-loading="recordsLoading">
-        <el-table-column prop="candidateName" label="候选人姓名" width="120" />
+      <el-table :data="durationRecords" style="width: 100%" stripe v-loading="recordsLoading" @sort-change="handleSortChange">
+        <el-table-column prop="candidateName" label="候选人姓名" width="120" sortable />
         <el-table-column prop="consultantName" label="负责顾问" width="120">
           <template #default="{ row }">
             <span style="color: #606266">{{ row.consultantName || '-' }}</span>
@@ -42,11 +60,11 @@
             {{ row.leftAt ? formatDate(row.leftAt) : '仍在此阶段' }}
           </template>
         </el-table-column>
-        <el-table-column label="停留时长" width="260">
+        <el-table-column label="停留时长" width="260" sortable prop="durationHours">
           <template #default="{ row }">
             <span v-if="row.durationDays !== null">
-              <el-tag>{{ row.durationDays }} 天</el-tag>
-              <span style="margin-left: 8px; color: #909399">({{ row.durationHours }} 小时)</span>
+              <el-tag>{{ toFixed2(row.durationDays) }} 天</el-tag>
+              <span style="margin-left: 8px; color: #909399">({{ toFixed2(row.durationHours) }} 小时)</span>
             </span>
             <span v-else style="color: #909399">-</span>
           </template>
@@ -70,20 +88,30 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { Timer, SwitchButton } from '@element-plus/icons-vue'
 import { statisticsApi } from '../api'
 
 const route = useRoute()
 const router = useRouter()
 
-const dateRange = ref([])
-const filterStage = ref('')
+const enterDateRange = ref([])
+const leaveDateRange = ref([])
+const filterStages = ref([])
 const candidateNameFilter = ref('')
 const durationRecords = ref([])
 const recordsLoading = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
+const sortField = ref('')
+const sortOrder = ref('')
 let debounceTimer = null
+
+const handleSortChange = ({ prop, order }) => {
+  sortField.value = prop || ''
+  sortOrder.value = order || ''
+  fetchDurationRecords()
+}
 
 const stageNames = {
   candidate_entry: '候选录入',
@@ -103,10 +131,40 @@ const stageNames = {
   leave: '离职'
 }
 
+const pad = (n) => n.toString().padStart(2, '0')
+
+const toFixed2 = (val) => {
+  const v = parseFloat(val)
+  return isNaN(v) ? 0 : (Math.round(v * 100) / 100).toFixed(2)
+}
+
+const shortDate = (d) => {
+  if (!d) return ''
+  const dt = new Date(d)
+  return `${pad(dt.getMonth() + 1)}/${pad(dt.getDate())}`
+}
+
+const toLocalDateString = (d) => {
+  if (!d) return d
+  const dt = new Date(d)
+  const Y = dt.getFullYear()
+  const M = pad(dt.getMonth() + 1)
+  const D = pad(dt.getDate())
+  return `${Y}-${M}-${D}`
+}
+
 const formatDate = (d) => {
   if (!d) return '-'
-  const dt = new Date(d)
-  return dt.toISOString().slice(0, 10) + ' ' + dt.toTimeString().slice(0, 8)
+  let str = String(d)
+  if (!str.includes('+')) str += ' +00:00'
+  const dt = new Date(str)
+  const Y = dt.getFullYear()
+  const M = pad(dt.getMonth() + 1)
+  const D = pad(dt.getDate())
+  const H = pad(dt.getHours())
+  const m = pad(dt.getMinutes())
+  const s = pad(dt.getSeconds())
+  return `${Y}-${M}-${D} ${H}:${m}:${s}`
 }
 
 const fetchDurationRecords = async () => {
@@ -116,15 +174,27 @@ const fetchDurationRecords = async () => {
       page: currentPage.value,
       pageSize: pageSize.value
     }
-    if (dateRange.value && dateRange.value.length === 2) {
-      params.startDate = dateRange.value[0].toISOString().slice(0, 10)
-      params.endDate = dateRange.value[1].toISOString().slice(0, 10)
+    if (enterDateRange.value && enterDateRange.value.length === 2) {
+      params.startDate = toLocalDateString(enterDateRange.value[0])
+      params.endDate = toLocalDateString(enterDateRange.value[1])
     }
-    if (filterStage.value) {
-      params.stage = filterStage.value
+    if (leaveDateRange.value && leaveDateRange.value.length === 2) {
+      params.leaveStartDate = toLocalDateString(leaveDateRange.value[0])
+      params.leaveEndDate = toLocalDateString(leaveDateRange.value[1])
+    }
+    let stagesToFilter = filterStages.value?.length ? filterStages.value : []
+    if (!stagesToFilter.length && route.query?.stage) {
+      stagesToFilter = [route.query.stage]
+    }
+    if (stagesToFilter.length) {
+      params.stages = stagesToFilter.join(',')
     }
     if (candidateNameFilter.value?.trim()) {
       params.name = candidateNameFilter.value.trim()
+    }
+    if (sortField.value && sortOrder.value) {
+      params.sortField = sortField.value
+      params.sortOrder = sortOrder.value
     }
     const rsp = await statisticsApi.getStageDurationRecords(params)
     durationRecords.value = rsp.records || []
@@ -149,13 +219,16 @@ const debouncedFetch = () => {
   }, 300)
 }
 
-watch([candidateNameFilter, dateRange, filterStage], () => {
+watch([candidateNameFilter, enterDateRange, leaveDateRange, filterStages], () => {
   debouncedFetch()
-})
+}, { deep: true })
 
 onMounted(() => {
   if (route.query.name) {
     candidateNameFilter.value = route.query.name
+  }
+  if (route.query.stage) {
+    filterStages.value = [route.query.stage]
   }
   fetchDurationRecords()
 })
@@ -165,6 +238,18 @@ onMounted(() => {
 .header-actions {
   display: flex;
   gap: 10px;
+  align-items: center;
+}
+
+.filter-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.filter-icon {
+  color: #909399;
+  margin-bottom: 2px;
 }
 
 .card-title {

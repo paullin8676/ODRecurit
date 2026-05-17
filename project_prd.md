@@ -1,12 +1,42 @@
 # OD-Recruit 招聘管理系统 - 技术实现文档
-> 版本: 3.0  
-> 日期: 2026-05-14  
+> 版本: 3.2  
+> 日期: 2026-05-17  
 > 定位: **技术视角** - 代码实现/数据库设计/API规范/数据流（面向开发人员）  
 > 真实数据库文件: `backend/database.sqlite` (NOT dev.sqlite3)
 
 ---
 
 ## 1. 技术栈
+
+### 1.0 时区统一原则（UTC存储 + 8小时偏移对齐中国时区）
+**问题根因：** SQLite+Sequelize 日期以**UTC字符串**存储（如`2026-05-14 11:00:00`或带`+00:00`），直接`DATE()`比较会用UTC日历判定，与中国时区业务日历差8小时边界。
+
+**后端统计统一修正模板：**
+```sql
+-- 1) 日期归属比较：先偏移到中国时区日历，再做Y-M-D比较
+DATE(datetime(field, '+8 hours')) = '2026-05-14'
+
+-- 2) 历史日结束时间戳：中国时区当日23:59 → 转回UTC时间戳再julianday差
+datetime(datetime(d.date, '+1 day', '-1 second'), '-8 hours')
+   → 例：统计5/14结束时间 → UTC 15:59:59 = 中国 23:59:59
+
+-- 3) "今日"判定：也用中国日历
+date(datetime('now', '+8 hours'))
+```
+
+**前端显示统一修正模板：** `DurationRecords.vue formatDate()`
+```javascript
+// 数据库无时区标记强制按UTC解析，再转浏览器本地时区
+let str = String(dateFromBackend)
+if (!str.includes('+')) str += ' +00:00'
+const dt = new Date(str)  // 自动转中国时区显示
+```
+
+**修正文件清单：**
+| 文件 | 修正内容 |
+|------|----------|
+| [CandidateStageTimelineService.js](file:///Users/paul/Documents/Opencode/OD-Recruit/backend/src/services/CandidateStageTimelineService.js) | 全部DATE边界比较偏移，两处trend结束时间戳转回UTC |
+| [DurationRecords.vue](file:///Users/paul/Documents/Opencode/OD-Recruit/frontend/src/views/DurationRecords.vue) | 无时区后缀强制补+00:00再new Date() |
 
 ### 1.1 前端栈
 | 技术 | 版本/说明 |
@@ -249,6 +279,7 @@ lsof -ti:5171,5173,3000 | xargs kill -9
 | 1 | ExamStage.vue"回退"按钮点完提示成功，候选人阶段没变化 | candidateApi.update 只更新候选人基本信息，不更新阶段 | ExamStage.vue 改为 candidateApi.rollback |
 | 2 | 后端返回 durationHours = 0，前端显示"-"（与仍在此阶段混淆） | js 0是falsy `0 ? day : null`走null分支 | `durationHours !== null` 严格判断 |
 | 3 | 开发脚本查询 dev.sqlite3 是空库，与服务器打开的库不一致 | pm2/server 打开路径不同 → cwd下生成不同sqlite文件 | 统一真实数据文件: backend/database.sqlite |
+| **4** | **趋势统计多算8小时+前端显示时间不一致** | **UTC存储日期，直接比较用UTC日历/显示直接解析无时区标记** | **统一参见1.0时区原则模板** |
 
 ---
 
@@ -256,4 +287,6 @@ lsof -ti:5171,5173,3000 | xargs kill -9
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| 3.2 | 2026-05-17 | 文档版本与代码逻辑同步更新<br>确认 CandidateStageTimelineService 服务中所有API实现与文档描述一致<br>包括 getDurationRecords / getDurationAggregations / getStageTrend / getTotalFlowTrend 等核心方法 |
+| 3.1 | 2026-05-16 | **新增1.0时区统一原则章节**<br>UTC存储+8h偏移模板（统计）/ 无时区标记强制补+00:00（显示）/ 两处trend计算结束点修正 |
 | 3.0 | 2026-05-14 | 文档明确定位：**技术视角**<br>完整梳理：目录结构/表清单（18张含RBAC）/数据流图/API参数返回值/部署端口<br>recruit_rule.md重复文档已删除 |

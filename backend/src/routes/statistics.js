@@ -201,9 +201,9 @@ const CandidateStageTimelineService = require('../services/CandidateStageTimelin
 
 router.get('/stage-duration-records', authenticate, async (req, res, next) => {
   try {
-    const { startDate, endDate, stage, name, page = 1, pageSize = 20 } = req.query;
+    const { startDate, endDate, leaveStartDate, leaveEndDate, stage, stages, name, page = 1, pageSize = 20, sortField, sortOrder } = req.query;
     const result = await CandidateStageTimelineService.getDurationRecords({
-      startDate, endDate, stage, name, page: parseInt(page), pageSize: parseInt(pageSize)
+      startDate, endDate, leaveStartDate, leaveEndDate, stage, stages, name, page: parseInt(page), pageSize: parseInt(pageSize), sortField, sortOrder
     });
     res.json(result);
   } catch (error) {
@@ -227,6 +227,26 @@ router.get('/candidate-total-durations', authenticate, async (req, res, next) =>
   try {
     const result = await CandidateStageTimelineService.getCandidateTotalDurations();
     res.json({ records: result });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/stage-trend', authenticate, async (req, res, next) => {
+  try {
+    const { periodDays = 7 } = req.query;
+    const result = await CandidateStageTimelineService.getStageTrend({ periodDays });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/total-flow-trend', authenticate, async (req, res, next) => {
+  try {
+    const { periodDays = 7 } = req.query;
+    const result = await CandidateStageTimelineService.getTotalFlowTrend({ periodDays });
+    res.json(result);
   } catch (error) {
     next(error);
   }
