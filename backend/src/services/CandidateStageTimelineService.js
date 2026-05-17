@@ -407,39 +407,29 @@ WITH RECURSIVE dates(date) AS (
 all_stages AS (
     SELECT DISTINCT stage FROM candidate_stage_timeline WHERE stage IS NOT NULL
 ),
-date_stage_candidates AS (
+daily_completion AS (
     SELECT 
-        d.date as trend_date,
-        s.stage,
-        t.candidate_id,
-        CASE 
-          WHEN t.duration_hours IS NOT NULL THEN t.duration_hours
-          ELSE 
-            (julianday(
-              IIF(d.date = date(datetime('now', '+8 hours')), datetime('now'), datetime(datetime(d.date, '+1 day', '-1 second'), '-8 hours'))
-            ) - julianday(t.entered_at)) * 24
-        END as stage_duration_hours
-    FROM dates d
-    CROSS JOIN all_stages s
-    INNER JOIN candidate_stage_timeline t 
-        ON t.stage = s.stage
-        AND (
-             DATE(datetime(t.left_at, '+8 hours')) = d.date 
-             OR 
-             (t.left_at IS NULL AND DATE(datetime(t.entered_at, '+8 hours')) <= d.date)
-             OR
-             (DATE(datetime(t.entered_at, '+8 hours')) <= d.date AND d.date < DATE(datetime(t.left_at, '+8 hours')))
-        )
-    INNER JOIN candidate c ON t.candidate_id = c.id
+        DATE(datetime(t.left_at, '+8 hours')) as completion_date,
+        t.stage,
+        COUNT(DISTINCT t.candidate_id) as candidate_count,
+        AVG(t.duration_hours) as avg_hours
+    FROM candidate_stage_timeline t
+    WHERE t.duration_hours IS NOT NULL
+      AND DATE(datetime(t.left_at, '+8 hours')) >= '${startStr}'
+      AND DATE(datetime(t.left_at, '+8 hours')) <= '${endStr}'
+    GROUP BY completion_date, stage
 )
 SELECT 
-    trend_date,
-    stage,
-    COUNT(DISTINCT candidate_id) as candidate_count,
-    AVG(stage_duration_hours) as avg_hours
-FROM date_stage_candidates
-GROUP BY trend_date, stage
-ORDER BY trend_date ASC, stage ASC
+    d.date as trend_date,
+    s.stage,
+    COALESCE(dc.candidate_count, 0) as candidate_count,
+    COALESCE(dc.avg_hours, 0) as avg_hours
+FROM dates d
+CROSS JOIN all_stages s
+LEFT JOIN daily_completion dc 
+    ON dc.completion_date = d.date 
+   AND dc.stage = s.stage
+ORDER BY d.date ASC, s.stage ASC
     `;
     const [rows] = await sequelize.query(sql);
     
