@@ -348,6 +348,7 @@ class CandidateStageTimelineService {
         t.candidate_id,
         c.name AS candidate_name,
         cs.current_stage,
+        (julianday('now') - julianday(t.entered_at)) AS total_days_raw,
         t.entered_at AS entry_entered_at
       FROM candidate_stage_timeline t
       INNER JOIN candidate c ON t.candidate_id = c.id
@@ -377,8 +378,7 @@ class CandidateStageTimelineService {
 
     return results.map(r => {
       const entryDate = new Date(r.entry_entered_at);
-      const now = new Date();
-      const diffDays = Math.round(((now - entryDate) / (1000 * 60 * 60 * 24)) * 10) / 10;
+      const diffDays = Math.round(parseFloat(r.total_days_raw) * 10) / 10;
       return {
         candidateId: r.candidate_id,
         candidateName: r.candidate_name || '未知',
