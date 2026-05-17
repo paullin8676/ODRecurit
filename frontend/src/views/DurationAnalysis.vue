@@ -56,7 +56,7 @@
       <el-col :span="24">
         <div class="card-container">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px">
-            <h3 class="card-title" style="margin: 0">流程总时间变化趋势</h3>
+            <h3 class="card-title" style="margin: 0">每天汇总每个候选人从候选录入到最终阶段的总耗天数变化趋势</h3>
             <el-button-group>
               <el-button size="small" :type="flowTrendDays === 7 ? 'primary' : 'default'" @click="fetchFlowTrend(7)">最近一周</el-button>
               <el-button size="small" :type="flowTrendDays === 14 ? 'primary' : 'default'" @click="fetchFlowTrend(14)">最近两周</el-button>
