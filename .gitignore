@@ -13,3 +13,4 @@ frontend/recruit.db
 backend/recruit.db
 .DS_Store
 check-tables.js
+backend/backups/
