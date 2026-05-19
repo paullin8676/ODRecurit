@@ -50,6 +50,11 @@ const authenticate = async (req, res, next) => {
 const authorize = (...roles) => {
   return (req, res, next) => {
     const userRoleCodes = req.user.roles.map(r => r.code);
+    
+    if (userRoleCodes.includes('admin')) {
+      return next();
+    }
+    
     const hasRole = roles.some(role => userRoleCodes.includes(role));
     
     if (!hasRole) {
