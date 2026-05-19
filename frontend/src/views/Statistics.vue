@@ -104,6 +104,24 @@ const consultantChartRef = ref()
 let stageChart = null
 let consultantChart = null
 
+const stageOrder = [
+  'candidate_entry',
+  'exam_declare',
+  'exam_complete',
+  'test_declare',
+  'test_complete',
+  'recommend_interview',
+  'qualification_interview',
+  'tech_interview_1',
+  'tech_interview_2',
+  'manager_interview',
+  'approval',
+  'offer',
+  'pending_onboarding',
+  'entry',
+  'leave'
+]
+
 const stageNames = {
   candidate_entry: '候选录入',
   exam_declare: '机考申报',
@@ -126,10 +144,17 @@ const initStageChart = () => {
   if (!stageChartRef.value) return
 
   stageChart = echarts.init(stageChartRef.value)
-  const stageData = byStage.value.map(item => ({
-    name: stageNames[item.currentStage] || item.currentStage,
-    value: parseInt(item.count)
-  }))
+  const stageMap = {}
+  byStage.value.forEach(item => {
+    stageMap[item.currentStage] = parseInt(item.count)
+  })
+  
+  const stageData = stageOrder
+    .filter(stage => stageMap[stage] !== undefined)
+    .map(stage => ({
+      name: stageNames[stage] || stage,
+      value: stageMap[stage]
+    }))
 
   const option = {
     tooltip: {
