@@ -1,5 +1,6 @@
 const express = require('express');
 const { Op, fn, col, literal } = require('sequelize');
+const sequelize = require('../config/database');
 const { Candidate, User, BusinessLine, Exam, ExamPaper, Test, Employee, Interview, InterviewRound, CandidateStage } = require('../models');
 const { authenticate, authorize } = require('../middleware/auth');
 
@@ -291,7 +292,6 @@ router.get('/by-business-line-late-stage', authenticate, async (req, res, next) 
 
 router.get('/exam-by-paper-status', authenticate, async (req, res, next) => {
   try {
-    const sequelize = require('../config/database');
     const [results] = await sequelize.query(`
       SELECT 
         ep.name AS paperName,
@@ -320,7 +320,6 @@ router.get('/exam-by-paper-status', authenticate, async (req, res, next) => {
 
 router.get('/test-by-status', authenticate, async (req, res, next) => {
   try {
-    const sequelize = require('../config/database');
     const [results] = await sequelize.query(`
       SELECT 
         cs.current_stage AS currentStage,

@@ -263,7 +263,11 @@ const initConsultantChart = (consultantStats) => {
     },
     yAxis: {
       type: 'value',
-      name: '候选人数量'
+      name: '候选人数量',
+      minInterval: 1,
+      axisLabel: {
+        formatter: '{value}'
+      }
     },
     series: [
       {
@@ -305,7 +309,11 @@ const initBusinessLineChart = (data) => {
     },
     yAxis: {
       type: 'value',
-      name: '候选人数量'
+      name: '候选人数量',
+      minInterval: 1,
+      axisLabel: {
+        formatter: '{value}'
+      }
     },
     series: [{
       type: 'bar',
@@ -353,7 +361,14 @@ const initExamPaperChart = (data) => {
       data: paperNames,
       axisLabel: { rotate: 15, fontSize: 10 }
     },
-    yAxis: { type: 'value', name: '候选人数量' },
+    yAxis: {
+      type: 'value',
+      name: '候选人数量',
+      minInterval: 1,
+      axisLabel: {
+        formatter: '{value}'
+      }
+    },
     series
   }
 
@@ -393,7 +408,14 @@ const initTestStatusChart = (data) => {
       data: stageList,
       axisLabel: { fontSize: 11 }
     },
-    yAxis: { type: 'value', name: '候选人数量' },
+    yAxis: {
+      type: 'value',
+      name: '候选人数量',
+      minInterval: 1,
+      axisLabel: {
+        formatter: '{value}'
+      }
+    },
     series
   }
 
