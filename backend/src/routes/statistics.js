@@ -254,42 +254,34 @@ router.get('/total-flow-trend', authenticate, async (req, res, next) => {
 
 router.get('/by-business-line-late-stage', authenticate, async (req, res, next) => {
   try {
-    const { Op } = require('sequelize');
-    const lateStages = [
-      'recommend_interview',
-      'qualification_interview',
-      'tech_interview_1',
-      'tech_interview_2',
-      'manager_interview',
-      'approval',
-      'offer',
-      'pending_onboarding',
-      'entry',
-      'leave'
-    ];
-    
-    const results = await CandidateStage.findAll({
-      attributes: [
-        'BusinessLine.id',
-        'BusinessLine.name',
-        [fn('COUNT', '*'), 'count']
-      ],
-      where: {
-        currentStage: { [Op.in]: lateStages }
-      },
-      include: [{
-        model: BusinessLine,
-        attributes: ['id', 'name'],
-        required: true
-      }],
-      group: ['BusinessLine.id'],
-      raw: true
-    });
+    const sequelize = require('../config/database');
+    const [results] = await sequelize.query(`
+      SELECT 
+        bl.id AS businessLineId,
+        bl.name AS businessLineName,
+        COUNT(*) AS count
+      FROM candidate_stage cs
+      JOIN candidate c ON cs.candidate_id = c.id
+      LEFT JOIN business_line bl ON c.business_line_id = bl.id
+      WHERE cs.current_stage IN (
+        'recommend_interview',
+        'qualification_interview',
+        'tech_interview_1',
+        'tech_interview_2',
+        'manager_interview',
+        'approval',
+        'offer',
+        'pending_onboarding',
+        'entry',
+        'leave'
+      )
+      GROUP BY bl.id, bl.name
+    `);
 
     res.json({ 
       statistics: results.map(r => ({
-        businessLineId: r['BusinessLine.id'],
-        businessLineName: r['BusinessLine.name'],
+        businessLineId: r.businessLineId,
+        businessLineName: r.businessLineName || '未分配业务线',
         count: parseInt(r.count)
       }))
     });
@@ -300,35 +292,25 @@ router.get('/by-business-line-late-stage', authenticate, async (req, res, next) 
 
 router.get('/exam-by-paper-status', authenticate, async (req, res, next) => {
   try {
-    const { Op } = require('sequelize');
-    const results = await CandidateStage.findAll({
-      attributes: [
-        'Exam.ExamPaper.name',
-        'CandidateStage.currentStage',
-        'Exam.currentStatus',
-        [fn('COUNT', '*'), 'count']
-      ],
-      where: {
-        currentStage: { [Op.in]: ['exam_declare', 'exam_complete'] }
-      },
-      include: [{
-        model: Exam,
-        required: true,
-        include: [{
-          model: ExamPaper,
-          attributes: ['name'],
-          required: false
-        }]
-      }],
-      group: ['Exam.ExamPaper.name', 'CandidateStage.currentStage', 'Exam.currentStatus'],
-      raw: true
-    });
+    const sequelize = require('../config/database');
+    const [results] = await sequelize.query(`
+      SELECT 
+        ep.name AS paperName,
+        cs.current_stage AS currentStage,
+        e.current_status AS examStatus,
+        COUNT(*) AS count
+      FROM candidate_stage cs
+      JOIN exam e ON cs.candidate_id = e.candidate_id
+      LEFT JOIN exam_paper ep ON e.exam_paper_id = ep.id
+      WHERE cs.current_stage IN ('exam_declare', 'exam_complete')
+      GROUP BY ep.name, cs.current_stage, e.current_status
+    `);
 
     res.json({ 
       statistics: results.map(r => ({
-        paperName: r['Exam.ExamPaper.name'] || '未关联试卷',
+        paperName: r.paperName || '未关联试卷',
         currentStage: r.currentStage,
-        examStatus: r['Exam.currentStatus'],
+        examStatus: r.examStatus,
         count: parseInt(r.count)
       }))
     });
@@ -339,28 +321,22 @@ router.get('/exam-by-paper-status', authenticate, async (req, res, next) => {
 
 router.get('/test-by-status', authenticate, async (req, res, next) => {
   try {
-    const { Op } = require('sequelize');
-    const results = await CandidateStage.findAll({
-      attributes: [
-        'CandidateStage.currentStage',
-        'Test.currentStatus',
-        [fn('COUNT', '*'), 'count']
-      ],
-      where: {
-        currentStage: { [Op.in]: ['test_declare', 'test_complete'] }
-      },
-      include: [{
-        model: Test,
-        required: true
-      }],
-      group: ['CandidateStage.currentStage', 'Test.currentStatus'],
-      raw: true
-    });
+    const sequelize = require('../config/database');
+    const [results] = await sequelize.query(`
+      SELECT 
+        cs.current_stage AS currentStage,
+        t.current_status AS testStatus,
+        COUNT(*) AS count
+      FROM candidate_stage cs
+      JOIN test t ON cs.candidate_id = t.candidate_id
+      WHERE cs.current_stage IN ('test_declare', 'test_complete')
+      GROUP BY cs.current_stage, t.current_status
+    `);
 
     res.json({ 
       statistics: results.map(r => ({
         currentStage: r.currentStage,
-        testStatus: r['Test.currentStatus'],
+        testStatus: r.testStatus,
         count: parseInt(r.count)
       }))
     });
