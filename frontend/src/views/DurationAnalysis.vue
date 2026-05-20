@@ -40,12 +40,21 @@
         <div class="card-container">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px">
             <h3 class="card-title" style="margin: 0">每天各完成阶段所需平均天数变化趋势</h3>
-            <el-button-group>
-              <el-button size="small" :type="stageTrendDays === 7 ? 'primary' : 'default'" @click="fetchStageTrend(7)">最近一周</el-button>
-              <el-button size="small" :type="stageTrendDays === 14 ? 'primary' : 'default'" @click="fetchStageTrend(14)">最近两周</el-button>
-              <el-button size="small" :type="stageTrendDays === 21 ? 'primary' : 'default'" @click="fetchStageTrend(21)">最近三周</el-button>
-              <el-button size="small" :type="stageTrendDays === 30 ? 'primary' : 'default'" @click="fetchStageTrend(30)">最近一月</el-button>
-            </el-button-group>
+            <div style="display: flex; align-items: center; gap: 8px">
+              <el-button-group>
+                <el-button size="small" :type="stageTrendQuickRange === 7 ? 'primary' : 'default'" @click="setStageTrendQuickRange(7)">最近一周</el-button>
+                <el-button size="small" :type="stageTrendQuickRange === 14 ? 'primary' : 'default'" @click="setStageTrendQuickRange(14)">最近两周</el-button>
+                <el-button size="small" :type="stageTrendQuickRange === 30 ? 'primary' : 'default'" @click="setStageTrendQuickRange(30)">最近一月</el-button>
+              </el-button-group>
+              <el-date-picker
+                v-model="stageTrendDateRange"
+                type="daterange"
+                range-separator="至"
+                start-placeholder="开始日期"
+                end-placeholder="结束日期"
+                size="small"
+              />
+            </div>
           </div>
           <div ref="stageTrendChartRef" style="height: 300px"></div>
         </div>
@@ -57,12 +66,21 @@
         <div class="card-container">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px">
             <h3 class="card-title" style="margin: 0">每天汇总每个候选人从候选录入到当前阶段，流转到各阶段总耗天数变化趋势</h3>
-            <el-button-group>
-              <el-button size="small" :type="flowTrendDays === 7 ? 'primary' : 'default'" @click="fetchFlowTrend(7)">最近一周</el-button>
-              <el-button size="small" :type="flowTrendDays === 14 ? 'primary' : 'default'" @click="fetchFlowTrend(14)">最近两周</el-button>
-              <el-button size="small" :type="flowTrendDays === 21 ? 'primary' : 'default'" @click="fetchFlowTrend(21)">最近三周</el-button>
-              <el-button size="small" :type="flowTrendDays === 30 ? 'primary' : 'default'" @click="fetchFlowTrend(30)">最近一月</el-button>
-            </el-button-group>
+            <div style="display: flex; align-items: center; gap: 8px">
+              <el-button-group>
+                <el-button size="small" :type="flowTrendQuickRange === 7 ? 'primary' : 'default'" @click="setFlowTrendQuickRange(7)">最近一周</el-button>
+                <el-button size="small" :type="flowTrendQuickRange === 14 ? 'primary' : 'default'" @click="setFlowTrendQuickRange(14)">最近两周</el-button>
+                <el-button size="small" :type="flowTrendQuickRange === 30 ? 'primary' : 'default'" @click="setFlowTrendQuickRange(30)">最近一月</el-button>
+              </el-button-group>
+              <el-date-picker
+                v-model="flowTrendDateRange"
+                type="daterange"
+                range-separator="至"
+                start-placeholder="开始日期"
+                end-placeholder="结束日期"
+                size="small"
+              />
+            </div>
           </div>
           <div ref="flowTrendChartRef" style="height: 300px"></div>
         </div>
@@ -117,11 +135,13 @@ const totalDurationRecords = ref([])
 const aggregations = ref([])
 const chartData = ref([])
 
-const stageTrendDays = ref(7)
+const stageTrendQuickRange = ref(null)
+const stageTrendDateRange = ref([])
 const stageTrendDates = ref([])
 const stageTrendSeries = ref([])
 
-const flowTrendDays = ref(7)
+const flowTrendQuickRange = ref(null)
+const flowTrendDateRange = ref([])
 const flowTrendDates = ref([])
 const flowTrendSeries = ref([])
 
@@ -191,6 +211,22 @@ const setQuickRange = (days) => {
   const startDate = new Date()
   startDate.setDate(today.getDate() - (days - 1))
   dateRange.value = [startDate, today]
+}
+
+const setStageTrendQuickRange = (days) => {
+  stageTrendQuickRange.value = days
+  const today = new Date()
+  const startDate = new Date()
+  startDate.setDate(today.getDate() - (days - 1))
+  stageTrendDateRange.value = [startDate, today]
+}
+
+const setFlowTrendQuickRange = (days) => {
+  flowTrendQuickRange.value = days
+  const today = new Date()
+  const startDate = new Date()
+  startDate.setDate(today.getDate() - (days - 1))
+  flowTrendDateRange.value = [startDate, today]
 }
 
 const initDurationChart = () => {
@@ -403,10 +439,16 @@ const fetchTotalDurations = async () => {
   }
 }
 
-const fetchStageTrend = async (days = 7) => {
-  stageTrendDays.value = days
+const fetchStageTrend = async () => {
   try {
-    const rsp = await statisticsApi.getStageTrend({ periodDays: days })
+    const params = {}
+    if (stageTrendDateRange.value && stageTrendDateRange.value.length === 2) {
+      params.startDate = toLocalDateString(stageTrendDateRange.value[0])
+      params.endDate = toLocalDateString(stageTrendDateRange.value[1])
+    } else {
+      params.periodDays = 7
+    }
+    const rsp = await statisticsApi.getStageTrend(params)
     stageTrendDates.value = rsp.dates || []
     stageTrendSeries.value = rsp.series || []
     setTimeout(() => initStageTrendChart(), 50)
@@ -414,10 +456,16 @@ const fetchStageTrend = async (days = 7) => {
   }
 }
 
-const fetchFlowTrend = async (days = 7) => {
-  flowTrendDays.value = days
+const fetchFlowTrend = async () => {
   try {
-    const rsp = await statisticsApi.getTotalFlowTrend({ periodDays: days })
+    const params = {}
+    if (flowTrendDateRange.value && flowTrendDateRange.value.length === 2) {
+      params.startDate = toLocalDateString(flowTrendDateRange.value[0])
+      params.endDate = toLocalDateString(flowTrendDateRange.value[1])
+    } else {
+      params.periodDays = 7
+    }
+    const rsp = await statisticsApi.getTotalFlowTrend(params)
     flowTrendDates.value = rsp.dates || []
     flowTrendSeries.value = rsp.series || []
     setTimeout(() => initFlowTrendChart(), 50)
@@ -435,10 +483,18 @@ watch(dateRange, () => {
   fetchDurationAgg()
 }, { deep: true })
 
+watch(stageTrendDateRange, () => {
+  fetchStageTrend()
+}, { deep: true })
+
+watch(flowTrendDateRange, () => {
+  fetchFlowTrend()
+}, { deep: true })
+
 onMounted(() => {
   setQuickRange(7)
-  fetchStageTrend(7)
-  fetchFlowTrend(7)
+  setStageTrendQuickRange(7)
+  setFlowTrendQuickRange(7)
   fetchTotalDurations()
   window.addEventListener('resize', handleResize)
 })

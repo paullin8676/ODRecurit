@@ -390,13 +390,20 @@ class CandidateStageTimelineService {
     }).sort((a, b) => b.totalDays - a.totalDays);
   }
 
-  static async getStageTrend({ periodDays }) {
-    const endDate = new Date();
-    const startDate = new Date();
-    const days = parseInt(periodDays || 7);
-    startDate.setDate(endDate.getDate() - (days - 1));
-    const startStr = this.toLocalDateString(startDate);
-    const endStr = this.toLocalDateString(endDate);
+  static async getStageTrend({ periodDays, startDate, endDate }) {
+    let startStr, endStr;
+    
+    if (startDate && endDate) {
+      startStr = startDate;
+      endStr = endDate;
+    } else {
+      const end = new Date();
+      const start = new Date();
+      const days = parseInt(periodDays || 7);
+      start.setDate(end.getDate() - (days - 1));
+      startStr = this.toLocalDateString(start);
+      endStr = this.toLocalDateString(end);
+    }
 
     const sql = `
 WITH RECURSIVE dates(date) AS (
@@ -480,13 +487,20 @@ ORDER BY d.date ASC, s.stage ASC
     return { dates, series };
   }
 
-  static async getTotalFlowTrend({ periodDays }) {
-    const endDate = new Date();
-    const startDate = new Date();
-    const days = parseInt(periodDays || 7);
-    startDate.setDate(endDate.getDate() - (days - 1));
-    const startStr = this.toLocalDateString(startDate);
-    const endStr = this.toLocalDateString(endDate);
+  static async getTotalFlowTrend({ periodDays, startDate, endDate }) {
+    let startStr, endStr;
+    
+    if (startDate && endDate) {
+      startStr = startDate;
+      endStr = endDate;
+    } else {
+      const end = new Date();
+      const start = new Date();
+      const days = parseInt(periodDays || 7);
+      start.setDate(end.getDate() - (days - 1));
+      startStr = this.toLocalDateString(start);
+      endStr = this.toLocalDateString(end);
+    }
 
     const sql = `
 WITH RECURSIVE dates(date) AS (

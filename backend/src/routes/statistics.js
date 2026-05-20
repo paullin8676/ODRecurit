@@ -234,8 +234,8 @@ router.get('/candidate-total-durations', authenticate, async (req, res, next) =>
 
 router.get('/stage-trend', authenticate, async (req, res, next) => {
   try {
-    const { periodDays = 7 } = req.query;
-    const result = await CandidateStageTimelineService.getStageTrend({ periodDays });
+    const { periodDays = 7, startDate, endDate } = req.query;
+    const result = await CandidateStageTimelineService.getStageTrend({ periodDays, startDate, endDate });
     res.json(result);
   } catch (error) {
     next(error);
@@ -244,8 +244,8 @@ router.get('/stage-trend', authenticate, async (req, res, next) => {
 
 router.get('/total-flow-trend', authenticate, async (req, res, next) => {
   try {
-    const { periodDays = 7 } = req.query;
-    const result = await CandidateStageTimelineService.getTotalFlowTrend({ periodDays });
+    const { periodDays = 7, startDate, endDate } = req.query;
+    const result = await CandidateStageTimelineService.getTotalFlowTrend({ periodDays, startDate, endDate });
     res.json(result);
   } catch (error) {
     next(error);
