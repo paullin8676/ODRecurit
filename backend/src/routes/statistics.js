@@ -1,6 +1,6 @@
 const express = require('express');
 const { Op, fn, col, literal } = require('sequelize');
-const { Candidate, User, BusinessLine, Exam, Test, Employee, Interview, InterviewRound, CandidateStage } = require('../models');
+const { Candidate, User, BusinessLine, Exam, ExamPaper, Test, Employee, Interview, InterviewRound, CandidateStage } = require('../models');
 const { authenticate, authorize } = require('../middleware/auth');
 
 const router = express.Router();
@@ -247,6 +247,123 @@ router.get('/total-flow-trend', authenticate, async (req, res, next) => {
     const { periodDays = 7, startDate, endDate } = req.query;
     const result = await CandidateStageTimelineService.getTotalFlowTrend({ periodDays, startDate, endDate });
     res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/by-business-line-late-stage', authenticate, async (req, res, next) => {
+  try {
+    const { Op } = require('sequelize');
+    const lateStages = [
+      'recommend_interview',
+      'qualification_interview',
+      'tech_interview_1',
+      'tech_interview_2',
+      'manager_interview',
+      'approval',
+      'offer',
+      'pending_onboarding',
+      'entry',
+      'leave'
+    ];
+    
+    const results = await CandidateStage.findAll({
+      attributes: [
+        'BusinessLine.id',
+        'BusinessLine.name',
+        [fn('COUNT', '*'), 'count']
+      ],
+      where: {
+        currentStage: { [Op.in]: lateStages }
+      },
+      include: [{
+        model: BusinessLine,
+        attributes: ['id', 'name'],
+        required: true
+      }],
+      group: ['BusinessLine.id'],
+      raw: true
+    });
+
+    res.json({ 
+      statistics: results.map(r => ({
+        businessLineId: r['BusinessLine.id'],
+        businessLineName: r['BusinessLine.name'],
+        count: parseInt(r.count)
+      }))
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/exam-by-paper-status', authenticate, async (req, res, next) => {
+  try {
+    const { Op } = require('sequelize');
+    const results = await CandidateStage.findAll({
+      attributes: [
+        'Exam.ExamPaper.name',
+        'CandidateStage.currentStage',
+        'Exam.currentStatus',
+        [fn('COUNT', '*'), 'count']
+      ],
+      where: {
+        currentStage: { [Op.in]: ['exam_declare', 'exam_complete'] }
+      },
+      include: [{
+        model: Exam,
+        required: true,
+        include: [{
+          model: ExamPaper,
+          attributes: ['name'],
+          required: false
+        }]
+      }],
+      group: ['Exam.ExamPaper.name', 'CandidateStage.currentStage', 'Exam.currentStatus'],
+      raw: true
+    });
+
+    res.json({ 
+      statistics: results.map(r => ({
+        paperName: r['Exam.ExamPaper.name'] || '未关联试卷',
+        currentStage: r.currentStage,
+        examStatus: r['Exam.currentStatus'],
+        count: parseInt(r.count)
+      }))
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/test-by-status', authenticate, async (req, res, next) => {
+  try {
+    const { Op } = require('sequelize');
+    const results = await CandidateStage.findAll({
+      attributes: [
+        'CandidateStage.currentStage',
+        'Test.currentStatus',
+        [fn('COUNT', '*'), 'count']
+      ],
+      where: {
+        currentStage: { [Op.in]: ['test_declare', 'test_complete'] }
+      },
+      include: [{
+        model: Test,
+        required: true
+      }],
+      group: ['CandidateStage.currentStage', 'Test.currentStatus'],
+      raw: true
+    });
+
+    res.json({ 
+      statistics: results.map(r => ({
+        currentStage: r.currentStage,
+        testStatus: r['Test.currentStatus'],
+        count: parseInt(r.count)
+      }))
+    });
   } catch (error) {
     next(error);
   }

@@ -87,6 +87,30 @@
         </div>
       </el-col>
     </el-row>
+
+    <el-row :gutter="20" style="margin-top: 20px">
+      <el-col :span="24">
+        <div class="card-container">
+          <h3 class="card-title">推荐面试及之后阶段 - 按业务线统计</h3>
+          <div ref="businessLineChartRef" style="height: 300px"></div>
+        </div>
+      </el-col>
+    </el-row>
+
+    <el-row :gutter="20" style="margin-top: 20px">
+      <el-col :span="12">
+        <div class="card-container">
+          <h3 class="card-title">机考申报/完成 - 按试卷名称+状态统计</h3>
+          <div ref="examPaperChartRef" style="height: 350px"></div>
+        </div>
+      </el-col>
+      <el-col :span="12">
+        <div class="card-container">
+          <h3 class="card-title">韧测申报/完成 - 按当前状态统计</h3>
+          <div ref="testStatusChartRef" style="height: 350px"></div>
+        </div>
+      </el-col>
+    </el-row>
   </div>
 </template>
 
@@ -101,8 +125,15 @@ const byStage = ref([])
 
 const stageChartRef = ref()
 const consultantChartRef = ref()
+const businessLineChartRef = ref()
+const examPaperChartRef = ref()
+const testStatusChartRef = ref()
+
 let stageChart = null
 let consultantChart = null
+let businessLineChart = null
+let examPaperChart = null
+let testStatusChart = null
 
 const stageOrder = [
   'candidate_entry',
@@ -138,6 +169,13 @@ const stageNames = {
   pending_onboarding: '待入职',
   entry: '入职',
   leave: '离职'
+}
+
+const statusColors = {
+  pending: '#909399',
+  passed: '#67c23a',
+  failed: '#f56c6c',
+  abandoned: '#e6a23c'
 }
 
 const initStageChart = () => {
@@ -245,13 +283,133 @@ const initConsultantChart = (consultantStats) => {
   consultantChart.setOption(option)
 }
 
+const initBusinessLineChart = (data) => {
+  if (!businessLineChartRef.value) return
+  if (businessLineChart) businessLineChart.dispose()
+
+  businessLineChart = echarts.init(businessLineChartRef.value)
+
+  const names = data.map(d => d.businessLineName || '未分配')
+  const values = data.map(d => d.count)
+
+  const option = {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' }
+    },
+    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+    xAxis: {
+      type: 'category',
+      data: names,
+      axisLabel: { rotate: 25, fontSize: 11 }
+    },
+    yAxis: {
+      type: 'value',
+      name: '候选人数量'
+    },
+    series: [{
+      type: 'bar',
+      data: values,
+      barWidth: '50%',
+      label: { show: true, position: 'top' },
+      itemStyle: { color: '#5c6bc0' }
+    }]
+  }
+
+  businessLineChart.setOption(option)
+}
+
+const initExamPaperChart = (data) => {
+  if (!examPaperChartRef.value) return
+  if (examPaperChart) examPaperChart.dispose()
+
+  examPaperChart = echarts.init(examPaperChartRef.value)
+
+  const paperNames = [...new Set(data.map(d => d.paperName))]
+  const stageList = [...new Set(data.map(d => stageNames[d.currentStage] || d.currentStage))]
+  const statusList = [...new Set(data.map(d => d.examStatus))]
+
+  const series = statusList.map(status => ({
+    name: status === 'pending' ? '待处理' : 
+          status === 'passed' ? '通过' :
+          status === 'failed' ? '不通过' :
+          status === 'abandoned' ? '放弃' : status,
+    type: 'bar',
+    stack: 'total',
+    emphasis: { focus: 'series' },
+    itemStyle: { color: statusColors[status] || '#409eff' },
+    data: paperNames.map(paper => {
+      const item = data.find(d => d.paperName === paper && d.examStatus === status)
+      return item ? item.count : 0
+    })
+  }))
+
+  const option = {
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    legend: { data: series.map(s => s.name), bottom: 0, type: 'scroll' },
+    grid: { left: '3%', right: '4%', bottom: '80px', containLabel: true },
+    xAxis: {
+      type: 'category',
+      data: paperNames,
+      axisLabel: { rotate: 15, fontSize: 10 }
+    },
+    yAxis: { type: 'value', name: '候选人数量' },
+    series
+  }
+
+  examPaperChart.setOption(option)
+}
+
+const initTestStatusChart = (data) => {
+  if (!testStatusChartRef.value) return
+  if (testStatusChart) testStatusChart.dispose()
+
+  testStatusChart = echarts.init(testStatusChartRef.value)
+
+  const stageList = [...new Set(data.map(d => stageNames[d.currentStage] || d.currentStage))]
+  const statusList = [...new Set(data.map(d => d.testStatus))]
+
+  const series = statusList.map(status => ({
+    name: status === 'pending' ? '待处理' : 
+          status === 'passed' ? '通过' :
+          status === 'failed' ? '不通过' :
+          status === 'abandoned' ? '放弃' : status,
+    type: 'bar',
+    stack: 'total',
+    emphasis: { focus: 'series' },
+    itemStyle: { color: statusColors[status] || '#409eff' },
+    data: stageList.map(stageName => {
+      const item = data.find(d => (stageNames[d.currentStage] || d.currentStage) === stageName && d.testStatus === status)
+      return item ? item.count : 0
+    })
+  }))
+
+  const option = {
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    legend: { data: series.map(s => s.name), bottom: 0, type: 'scroll' },
+    grid: { left: '3%', right: '4%', bottom: '80px', containLabel: true },
+    xAxis: {
+      type: 'category',
+      data: stageList,
+      axisLabel: { fontSize: 11 }
+    },
+    yAxis: { type: 'value', name: '候选人数量' },
+    series
+  }
+
+  testStatusChart.setOption(option)
+}
+
 const fetchData = async () => {
   try {
     const params = {}
-    const [summaryRes, stageRes, consultantRes] = await Promise.all([
+    const [summaryRes, stageRes, consultantRes, blRes, examRes, testRes] = await Promise.all([
       statisticsApi.summary(),
       statisticsApi.byStage(params),
-      statisticsApi.byConsultant(params)
+      statisticsApi.byConsultant(params),
+      statisticsApi.byBusinessLineLateStage(),
+      statisticsApi.getExamByPaperStatus(),
+      statisticsApi.getTestByStatus()
     ])
 
     summary.value = summaryRes.summary
@@ -260,6 +418,9 @@ const fetchData = async () => {
     setTimeout(() => {
       initStageChart()
       initConsultantChart(consultantRes.statistics || [])
+      initBusinessLineChart(blRes.statistics || [])
+      initExamPaperChart(examRes.statistics || [])
+      initTestStatusChart(testRes.statistics || [])
     }, 100)
   } catch (error) {
   }
@@ -268,6 +429,9 @@ const fetchData = async () => {
 const handleResize = () => {
   stageChart?.resize()
   consultantChart?.resize()
+  businessLineChart?.resize()
+  examPaperChart?.resize()
+  testStatusChart?.resize()
 }
 
 onMounted(() => {
@@ -279,6 +443,9 @@ onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   stageChart?.dispose()
   consultantChart?.dispose()
+  businessLineChart?.dispose()
+  examPaperChart?.dispose()
+  testStatusChart?.dispose()
 })
 </script>
 
