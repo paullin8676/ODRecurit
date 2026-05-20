@@ -254,15 +254,14 @@ router.get('/total-flow-trend', authenticate, async (req, res, next) => {
 
 router.get('/by-business-line-late-stage', authenticate, async (req, res, next) => {
   try {
-    const sequelize = require('../config/database');
     const [results] = await sequelize.query(`
       SELECT 
         bl.id AS businessLineId,
         bl.name AS businessLineName,
         COUNT(*) AS count
       FROM candidate_stage cs
-      JOIN candidate c ON cs.candidate_id = c.id
-      LEFT JOIN business_line bl ON c.business_line_id = bl.id
+      LEFT JOIN interview i ON cs.candidate_id = i.candidate_id
+      LEFT JOIN business_line bl ON i.business_line_id = bl.id
       WHERE cs.current_stage IN (
         'recommend_interview',
         'qualification_interview',
