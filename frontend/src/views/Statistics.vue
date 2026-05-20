@@ -89,15 +89,6 @@
     </el-row>
 
     <el-row :gutter="20" style="margin-top: 20px">
-      <el-col :span="24">
-        <div class="card-container">
-          <h3 class="card-title">推荐面试及之后阶段 - 按业务线统计</h3>
-          <div ref="businessLineChartRef" style="height: 300px"></div>
-        </div>
-      </el-col>
-    </el-row>
-
-    <el-row :gutter="20" style="margin-top: 20px">
       <el-col :span="12">
         <div class="card-container">
           <h3 class="card-title">机考申报/完成 - 按试卷名称+状态统计</h3>
@@ -108,6 +99,15 @@
         <div class="card-container">
           <h3 class="card-title">韧测申报/完成 - 按当前状态统计</h3>
           <div ref="testStatusChartRef" style="height: 350px"></div>
+        </div>
+      </el-col>
+    </el-row>
+
+    <el-row :gutter="20" style="margin-top: 20px">
+      <el-col :span="24">
+        <div class="card-container">
+          <h3 class="card-title">推荐面试及之后阶段 - 按业务线统计</h3>
+          <div ref="businessLineChartRef" style="height: 300px"></div>
         </div>
       </el-col>
     </el-row>
