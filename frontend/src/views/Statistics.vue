@@ -206,7 +206,8 @@ const initStageChart = () => {
     series: [
       {
         type: 'pie',
-        radius: ['40%', '70%'],
+        center: ['65%', '50%'],
+        radius: ['40%', '65%'],
         avoidLabelOverlap: true,
         itemStyle: {
           borderRadius: 10,
