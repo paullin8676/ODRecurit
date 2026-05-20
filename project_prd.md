@@ -1,6 +1,6 @@
 # OD-Recruit 招聘管理系统 - 技术实现文档
-> 版本: 3.2  
-> 日期: 2026-05-17  
+> 版本: 3.3  
+> 日期: 2026-05-20  
 > 定位: **技术视角** - 代码实现/数据库设计/API规范/数据流（面向开发人员）  
 > 真实数据库文件: `backend/database.sqlite` (NOT dev.sqlite3)
 
@@ -280,6 +280,31 @@ lsof -ti:5171,5173,3000 | xargs kill -9
 | 2 | 后端返回 durationHours = 0，前端显示"-"（与仍在此阶段混淆） | js 0是falsy `0 ? day : null`走null分支 | `durationHours !== null` 严格判断 |
 | 3 | 开发脚本查询 dev.sqlite3 是空库，与服务器打开的库不一致 | pm2/server 打开路径不同 → cwd下生成不同sqlite文件 | 统一真实数据文件: backend/database.sqlite |
 | **4** | **趋势统计多算8小时+前端显示时间不一致** | **UTC存储日期，直接比较用UTC日历/显示直接解析无时区标记** | **统一参见1.0时区原则模板** |
+| 5 | auth.js中间件权限判断可绕过 | admin角色未单独判断，多角色权限判断逻辑遗漏 | auth.js authorize admin自动next()绕过后续检查 |
+
+---
+
+## 7.1 新增脚本工具
+
+| 脚本 | 说明 |
+|------|------|
+| [backup_recruitment_data.js](file:///Users/paul/Documents/Opencode/OD-Recruit/backend/scripts/backup_recruitment_data.js) | 数据库备份脚本，完整备份8张招聘过程表：candidate/candidate_stage/candidate_stage_timeline/exam/test/interview/interview_round/employee<br>自动生成带时间戳备份文件 + latest 备份文件，方便清库前快速备份 |
+| [restore_recruitment_data.js](file:///Users/paul/Documents/Opencode/OD-Recruit/backend/scripts/restore_recruitment_data.js) | 数据库恢复脚本，支持事务保护失败自动回滚<br>默认恢复latest备份，也可指定备份文件路径恢复 |
+| [generate_full_process_data.js](file:///Users/paul/Documents/Opencode/OD-Recruit/backend/scripts/generate_full_process_data.js) | 全流程测试数据生成脚本，每个阶段创建一个候选人直达该阶段 |
+| [clear_recruitment_data.sql](file:///Users/paul/Documents/Opencode/OD-Recruit/backend/clear_recruitment_data.sql) | 按外键依赖顺序清空招聘过程相关表数据的SQL脚本 |
+
+---
+
+## 7.2 统计筛选交互统一
+
+三处趋势图表筛选交互方式完全一致（DurationAnalysis.vue停留分析页）：
+| 图表 | 筛选方式 |
+|------|----------|
+| 某时间段内各阶段完成平均天数统计 | 快捷按钮: 最近一周/两周/一月 + 日期范围选择器 |
+| 每天各完成阶段所需平均天数变化趋势 | **与第一个图表统一** - 可快捷按钮也可自定义起止日期 |
+| 每天汇总各阶段总耗天数变化趋势 | **与第一个图表统一** - 可快捷按钮也可自定义起止日期 |
+
+后端接口 `getStageTrend` / `getTotalFlowTrend` 同时支持两种传参：`periodDays=N` 或 `startDate=YYYY-MM-DD&endDate=YYYY-MM-DD`
 
 ---
 
@@ -287,6 +312,7 @@ lsof -ti:5171,5173,3000 | xargs kill -9
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| 3.3 | 2026-05-20 | **新增工具脚本章节（7.1/7.2）**<br>数据备份/恢复脚本: backup_recruitment_data/restore_recruitment_data<br>测试数据生成: generate_full_process_data/clear_recruitment_data.sql<br>RBAC权限Bug修复: admin角色自动授权全部接口<br>三处统计筛选统一: 趋势图表起止日期可手动自由选择 |
 | 3.2 | 2026-05-17 | 文档版本与代码逻辑同步更新<br>确认 CandidateStageTimelineService 服务中所有API实现与文档描述一致<br>包括 getDurationRecords / getDurationAggregations / getStageTrend / getTotalFlowTrend 等核心方法 |
 | 3.1 | 2026-05-16 | **新增1.0时区统一原则章节**<br>UTC存储+8h偏移模板（统计）/ 无时区标记强制补+00:00（显示）/ 两处trend计算结束点修正 |
 | 3.0 | 2026-05-14 | 文档明确定位：**技术视角**<br>完整梳理：目录结构/表清单（18张含RBAC）/数据流图/API参数返回值/部署端口<br>recruit_rule.md重复文档已删除 |
