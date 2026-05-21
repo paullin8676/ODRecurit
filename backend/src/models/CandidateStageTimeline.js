@@ -51,10 +51,28 @@ const CandidateStageTimeline = sequelize.define('CandidateStageTimeline', {
       fields: ['candidate_id', 'stage']
     },
     {
+      name: 'idx_cst_stage',
       fields: ['stage']
     },
     {
+      name: 'idx_cst_entered',
       fields: ['entered_at']
+    },
+    {
+      name: 'idx_cst_stage_entered',
+      fields: ['stage', 'entered_at']
+    },
+    {
+      name: 'idx_cst_stage_dur',
+      fields: ['stage', 'duration_hours']
+    },
+    {
+      name: 'idx_cst_cov1',
+      fields: ['entered_at', 'left_at', 'duration_hours', 'stage']
+    },
+    {
+      name: 'idx_cst_cov2',
+      fields: ['candidate_id', 'stage', 'entered_at', 'left_at', 'duration_hours']
     }
   ]
 });

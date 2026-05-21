@@ -14,14 +14,12 @@ router.get('/', authenticate, dataPermission, async (req, res, next) => {
     const pageNum = parseInt(page) || 1;
     const size = parseInt(pageSize) || 20;
 
-    // 构建查询条件
     const where = {};
     
     if (name) {
       where.name = { [Op.like]: `%${name}%` };
     }
 
-    // 构建阶段过滤条件
     const stageWhere = {};
     if (currentStage && currentStage !== '') {
       stageWhere.currentStage = currentStage;
@@ -31,19 +29,26 @@ router.get('/', authenticate, dataPermission, async (req, res, next) => {
       stageWhere.currentStage = { [Op.in]: stageArray };
     }
 
-    // 添加数据权限过滤
     if (req.consultantIds && req.consultantIds.length > 0) {
       stageWhere.consultantId = { [Op.in]: req.consultantIds };
     }
 
-    // 使用 findAndCountAll 进行数据库分页
-    const include = Object.keys(stageWhere).length > 0 ? [
-      {
-        model: CandidateStage,
-        where: stageWhere,
-        required: true
-      }
-    ] : [];
+    const candidateStageInclude = {
+      model: CandidateStage,
+      include: [{
+        model: User,
+        as: 'consultant',
+        attributes: ['id', 'realName']
+      }]
+    };
+
+    const hasStageFilter = Object.keys(stageWhere).length > 0;
+    if (hasStageFilter) {
+      candidateStageInclude.where = stageWhere;
+      candidateStageInclude.required = true;
+    }
+
+    const include = [candidateStageInclude];
 
     const { count, rows } = await Candidate.findAndCountAll({
       where,
@@ -55,7 +60,6 @@ router.get('/', authenticate, dataPermission, async (req, res, next) => {
 
     const candidateIds = rows.map(c => c.id);
 
-    // 查询对应的Exam数据
     const exams = await Exam.findAll({
       where: {
         candidateId: {
@@ -72,10 +76,10 @@ router.get('/', authenticate, dataPermission, async (req, res, next) => {
       examMap[exam.candidateId] = exam;
     });
 
-    const resultCandidates = await Promise.all(rows.map(async candidate => {
+    const resultCandidates = rows.map(candidate => {
       const exam = examMap[candidate.id];
-      const candidateStage = await StageService.getStage(candidate.id);
-      const consultant = candidateStage && candidateStage.consultantId ? await User.findByPk(candidateStage.consultantId) : null;
+      const candidateStage = candidate.CandidateStage;
+      const consultant = candidateStage?.consultant;
       return {
         id: candidate.id,
         name: candidate.name,
@@ -83,8 +87,8 @@ router.get('/', authenticate, dataPermission, async (req, res, next) => {
         phone: candidate.phone,
         email: candidate.email,
         idCard: candidate.idCard,
-        currentStage: candidateStage ? candidateStage.currentStage : 'candidate_entry',
-        consultantName: consultant ? consultant.realName : '-',
+        currentStage: candidateStage?.currentStage || 'candidate_entry',
+        consultantName: consultant?.realName || '-',
         exam: exam && exam.id ? {
           id: exam.id,
           candidateId: exam.candidateId,
@@ -100,7 +104,7 @@ router.get('/', authenticate, dataPermission, async (req, res, next) => {
           currentStatus: exam.currentStatus || 'pending'
         } : null
       };
-    }));
+    });
 
     res.json({
       exams: resultCandidates,

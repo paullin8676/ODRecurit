@@ -1,15 +1,93 @@
 # OD-Recruit 招聘管理系统 - 技术实现文档
-> 版本: 3.3  
-> 日期: 2026-05-20  
+> 版本: 3.5  
+> 日期: 2026-05-21  
 > 定位: **技术视角** - 代码实现/数据库设计/API规范/数据流（面向开发人员）  
-> 真实数据库文件: `backend/database.sqlite` (NOT dev.sqlite3)
+> 双数据库支持: `SQLite` (`backend/database.sqlite`) + **`MariaDB 10.5+`** (生产级部署，推荐)
+
+---
+
+## 0. 版本升级日志
+
+### v3.4 → v3.5 (2026-05-21) 代码重构与性能优化
+
+#### 0.1 冗余代码消除（N+1 查询问题）
+| 模块 | 问题 | 优化方案 |
+|------|------|---------|
+| **机考列表** | [exam.js](file:///Users/paul/Documents/Opencode/OD-Recruit/backend/src/routes/exam.js) `Promise.all(rows.map(...))` 循环内异步调用 `StageService.getStage()` + `User.findByPk()` → 每页 20 条产生 41 查询 | 改为 Sequelize `include: [{ model: CandidateStage, include: [{ model: User, as: 'consultant' }] }]` 一次性 JOIN 加载 → 固定 3 次查询 |
+| **韧测列表** | [test.js](file:///Users/paul/Documents/Opencode/OD-Recruit/backend/src/routes/test.js) 同上 | 同上 |
+| **面试列表** | [interview.js](file:///Users/paul/Documents/Opencode/OD-Recruit/backend/src/routes/interview.js) 每页 20 条循环内 3 次异步查询 | 同上，include 追加: `{ model: Employee, limit: 1 }` |
+
+#### 0.2 统计报表 CTE 查询性能问题
+| 接口 | 问题 | 优化方案 |
+|-----|------|---------|
+| **stage-trend** | [CandidateStageTimelineService.js](file:///Users/paul/Documents/Opencode/OD-Recruit/backend/src/services/CandidateStageTimelineService.js#L414-L416) `all_stages` CTE 扫描 timeline 全表 `SELECT DISTINCT stage` 去重 | 阶段枚举不从数据表查，改为 JS 常量派生 `UNION ALL SELECT 'stage1' UNION ALL SELECT 'stage2' ...` → CTE 派生表成本 O(1) 与数据量无关 |
+| **total-flow-trend** | 同上 | 同上 |
+| 全局常量提取 | `stageNames` 对象在各文件重复定义 14+ 次 | 后端: 模块级 `const STAGE_NAMES = {}` 导出；前端: [stage-constants.js](file:///Users/paul/Documents/Opencode/OD-Recruit/frontend/src/utils/stage-constants.js) 统一管理 |
+
+#### 0.3 前端 API 封装简化
+在 [api/index.js](file:///Users/paul/Documents/Opencode/OD-Recruit/frontend/src/api/index.js) 消除 5 处分页参数处理重复代码：
+```javascript
+// 高阶工厂函数统一处理 stages 数组参数
+function createGetAllWithStages(resource) {
+  return (params = {}) => api.get(`/${resource}`, { params: processQueryParams(params) })
+}
+// 统一: candidateApi / employeeApi / examApi / testApi / interviewApi
+export const candidateApi = { getAll: createGetAllWithStages('candidates'), ... }
+```
 
 ---
 
 ## 1. 技术栈
 
-### 1.0 时区统一原则（UTC存储 + 8小时偏移对齐中国时区）
-**问题根因：** SQLite+Sequelize 日期以**UTC字符串**存储（如`2026-05-14 11:00:00`或带`+00:00`），直接`DATE()`比较会用UTC日历判定，与中国时区业务日历差8小时边界。
+### 1.0 双数据库方言架构（SQLite + MariaDB）
+**关键设计决策：** 单代码库同时支持两种数据库，通过 [dbConfig.js](file:///Users/paul/Documents/Opencode/OD-Recruit/backend/src/config/dbConfig.js) 与 [CandidateStageTimelineService.js](file:///Users/paul/Documents/Opencode/OD-Recruit/backend/src/services/CandidateStageTimelineService.js) 方言层实现：
+
+| 层级 | 处理方案 |
+|------|---------|
+| 连接层 | `.env` 切换 `DB_DIALECT=sqlite` 或 `mysql` |
+| ORM层 | Sequelize 6 双方言兼容模型定义 |
+| 统计SQL层 | 方言辅助函数动态渲染（详见 1.0.1 章节） |
+
+#### 1.0.1 SQL方言兼容层辅助函数（CandidateStageTimelineService.js）
+```javascript
+// 模块级方言检测（首行执行）
+const isSQLite = sequelize.getDialect() === 'sqlite';
+const isMySQL = sequelize.getDialect() === 'mysql' || sequelize.getDialect() === 'mariadb';
+
+function localDate(col) { /* 日边界归属: 统一中国时区日历判定 */ }
+  → SQLite: DATE(datetime(col, '+8 hours'))
+  → MariaDB: DATE(CONVERT_TZ(col, '+00:00', '+08:00'))
+
+function julianDayDiff(colA, colB) { /* 两时点精确天数差 */ }
+  → SQLite: julianday(colA) - julianday(colB)
+  → MariaDB: TIMESTAMPDIFF(SECOND, colB, colA) / 86400.0
+
+function diffDaysNowMinusDate(col) { /* 时点→今日流逝天数 */ }
+  → SQLite: julianday('now') - julianday(col)
+  → MariaDB: TIMESTAMPDIFF(SECOND, col, NOW()) / 86400.0  // 自洽基准无需强制UTC
+
+function dateAdd1Day(col) { /* 日期前进一天 */ }
+  → SQLite: date(col, '+1 day')
+  → MariaDB: DATE_ADD(col, INTERVAL 1 DAY)
+```
+
+**MariaDB 推荐部署架构（当前生产配置）：**
+```ini
+[.env]
+DB_DIALECT=mysql
+MYSQL_ENABLED=true
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=recruit_db
+DB_USER=recruit
+DB_PASSWORD=recruit123
+```
+
+### 1.1 时区模型选择（按数据库自洽原则）
+| 数据库 | 日期存储模型 | 时长计算基准 | 推荐场景 |
+|--------|-------------|-------------|---------|
+| **SQLite** | Sequelize自动UTC字符串存储 | `julianday('now') - julianday(col)` | 开发环境/演示Demo |
+| **MariaDB** | `datetime` 本地时间字面量中国时区 | `TIMESTAMPDIFF(SECOND, col, NOW())` | 生产环境（与当前业务操作时点自洽） |
 
 **后端统计统一修正模板：**
 ```sql
@@ -312,6 +390,7 @@ lsof -ti:5171,5173,3000 | xargs kill -9
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| 3.4 | 2026-05-20 | **新增1.0双数据库方言架构章节**<br>SQLite/MariaDB双数据库无缝切换(.env配置驱动)<br>5个SQL方言辅助函数：localDate/dateAdd1Day/julianDayDiff/diffDaysNowMinusDate<br>11处 dialect-branched 分支SQL动态渲染：两处trend图表 + 停留时长统计API<br>Mariadb迁移完整指南 + 覆盖索引创建脚本 |
 | 3.3 | 2026-05-20 | **新增工具脚本章节（7.1/7.2）**<br>数据备份/恢复脚本: backup_recruitment_data/restore_recruitment_data<br>测试数据生成: generate_full_process_data/clear_recruitment_data.sql<br>RBAC权限Bug修复: admin角色自动授权全部接口<br>三处统计筛选统一: 趋势图表起止日期可手动自由选择 |
 | 3.2 | 2026-05-17 | 文档版本与代码逻辑同步更新<br>确认 CandidateStageTimelineService 服务中所有API实现与文档描述一致<br>包括 getDurationRecords / getDurationAggregations / getStageTrend / getTotalFlowTrend 等核心方法 |
 | 3.1 | 2026-05-16 | **新增1.0时区统一原则章节**<br>UTC存储+8h偏移模板（统计）/ 无时区标记强制补+00:00（显示）/ 两处trend计算结束点修正 |

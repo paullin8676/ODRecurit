@@ -72,7 +72,6 @@ const updateInterviewStatus = async (interviewId) => {
   }
 
   if (interview.currentStatus !== newStatus) {
-    console.log(`更新 Interview ${interviewId} 状态: ${interview.currentStatus} -> ${newStatus}`);
     await interview.update({ currentStatus: newStatus });
   }
 };
@@ -97,7 +96,6 @@ const syncEmployeeOnOffer = async (interviewId, roundsData, operatorId) => {
   const candidateId = candidate.id;
   
   if (!candidateId) {
-    console.log(`候选人没有ID，无法同步employee`);
     return;
   }
 
@@ -115,7 +113,6 @@ const syncEmployeeOnOffer = async (interviewId, roundsData, operatorId) => {
           businessLineId: interview.businessLineId,
           updatedBy: operatorId
         });
-        console.log(`更新 Employee ${employee.id} 入职日期`);
       }
       // 如果已离职，忽略
     } else {
@@ -126,13 +123,11 @@ const syncEmployeeOnOffer = async (interviewId, roundsData, operatorId) => {
         entryDate: offerRoundData.entryDate,
         updatedBy: operatorId
       });
-      console.log(`创建新 Employee 候选人ID: ${candidate.id}`);
     }
   } else if (offerRoundData.currentStatus === 'failed') {
     // 如果选择不接受，删除对应的employee记录（仅当状态为待入职时）
     if (employee && currentStage === 'pending_onboarding') {
       await employee.destroy();
-      console.log(`删除 Employee ${employee.id}（候选人ID: ${candidate.id}）`);
     }
   }
 };
@@ -228,7 +223,17 @@ router.get('/', authenticate, dataPermission, async (req, res, next) => {
             model: CandidateStage,
             as: 'CandidateStage',
             where: Object.keys(candidateStageWhere).length > 0 ? candidateStageWhere : undefined,
-            required: Object.keys(candidateStageWhere).length > 0
+            required: Object.keys(candidateStageWhere).length > 0,
+            include: [{
+              model: User,
+              as: 'consultant',
+              attributes: ['id', 'realName']
+            }]
+          },
+          {
+            model: Employee,
+            limit: 1,
+            order: [['id', 'DESC']]
           }
         ]
       },
@@ -275,17 +280,16 @@ router.get('/', authenticate, dataPermission, async (req, res, next) => {
       offset
     });
     
-    let transformedInterviews = await Promise.all(rows.map(async (interview) => {
+    let transformedInterviews = rows.map(interview => {
       const candidate = interview.Candidate;
       if (!candidate) return null;
-      const candidateId = candidate.id;
-      const employee = await Employee.findOne({ where: { candidateId: candidateId } });
-      const candidateStage = await StageService.getStage(candidateId);
+      const candidateStage = candidate.CandidateStage;
+      const employees = candidate.Employees || [];
+      const employee = employees[0] || null;
       const currentStage = candidateStage ? candidateStage.currentStage : null;
-      const consultant = candidateStage && candidateStage.consultantId ? await User.findByPk(candidateStage.consultantId) : null;
-      const consultantName = consultant ? consultant.realName : '-';
+      const consultantName = candidateStage?.consultant?.realName || '-';
       return transformInterview(interview, employee, currentStage, consultantName);
-    }));
+    });
     transformedInterviews = transformedInterviews.filter(i => i);
     
     // passStatus filter is now applied at database level in whereClause
@@ -417,10 +421,6 @@ router.put('/:id', authenticate, async (req, res, next) => {
     const { id } = req.params;
     const { candidateId, businessLineId, rounds, currentStage, currentStatus } = req.body;
 
-    console.log('=== Interview Update Request ===');
-    console.log('interviewId:', id);
-    console.log('rounds:', JSON.stringify(rounds, null, 2));
-
     const interview = await Interview.findByPk(id);
     if (!interview) {
       return res.status(404).json({ error: 'Interview not found' });
@@ -432,7 +432,6 @@ router.put('/:id', authenticate, async (req, res, next) => {
     // 先更新所有的 rounds
     if (rounds && Array.isArray(rounds)) {
       for (const roundData of rounds) {
-        console.log(`Processing round: ${roundData.stageCode}, currentStatus: ${roundData.currentStatus}`);
         
         const [round, roundCreated] = await InterviewRound.findOrCreate({
           where: {
@@ -451,7 +450,6 @@ router.put('/:id', authenticate, async (req, res, next) => {
         });
 
         if (!roundCreated) {
-          console.log(`Updating existing round: ${roundData.stageCode}`);
           const updateData = {};
           if (roundData.scheduledDate !== undefined && roundData.scheduledDate !== null) {
             updateData.scheduledDate = roundData.scheduledDate;

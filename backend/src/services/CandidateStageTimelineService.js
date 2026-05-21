@@ -2,6 +2,55 @@ const { CandidateStageTimeline, Candidate } = require('../models');
 const sequelize = require('../config/database');
 const { Op } = require('sequelize');
 
+const isSQLite = sequelize.getDialect() === 'sqlite';
+const isMySQL = sequelize.getDialect() === 'mysql' || sequelize.getDialect() === 'mariadb';
+
+const STAGE_NAMES = {
+  candidate_entry: '候选录入',
+  exam_declare: '机考申报',
+  exam_complete: '机考完成',
+  test_declare: '韧测申报',
+  test_complete: '韧测完成',
+  recommend_interview: '推荐面试',
+  qualification_interview: '资面安排',
+  tech_interview_1: '技术面试(一)',
+  tech_interview_2: '技术面试(二)',
+  manager_interview: '主管面试',
+  approval: '租用审批',
+  offer: 'Offer',
+  pending_onboarding: '待入职',
+  entry: '入职',
+  leave: '离职'
+};
+
+const STAGE_ORDER = ['candidate_entry', 'exam_declare', 'exam_complete', 'test_declare', 'test_complete',
+                    'recommend_interview', 'qualification_interview', 'tech_interview_1', 'tech_interview_2',
+                    'manager_interview', 'approval', 'offer', 'pending_onboarding', 'entry', 'leave'];
+
+function localDate(col) {
+  if (isSQLite) return `DATE(datetime(${col}, '+8 hours'))`;
+  return `DATE(CONVERT_TZ(${col}, '+00:00', '+08:00'))`;
+}
+
+function dateAdd1Day(col) {
+  if (isSQLite) return `date(${col}, '+1 day')`;
+  return `DATE_ADD(${col}, INTERVAL 1 DAY)`;
+}
+
+function julianDayDiff(colA, colB) {
+  if (isSQLite) return `julianday(${colA}) - julianday(${colB})`;
+  return `TIMESTAMPDIFF(SECOND, ${colB}, ${colA}) / 86400.0`;
+}
+
+function diffDaysNowMinusDate(col) {
+  if (isSQLite) return `(julianday('now') - julianday(${col}))`;
+  return `TIMESTAMPDIFF(SECOND, ${col}, NOW()) / 86400.0`;
+}
+
+async function executeReportQuery(sql) {
+  return await sequelize.query(sql);
+}
+
 class CandidateStageTimelineService {
   static calculateDurationHours(dateLeft, dateEntered) {
     if (!dateLeft || !dateEntered) {
@@ -118,23 +167,23 @@ class CandidateStageTimelineService {
     let whereConditions = ['1=1'];
 
     if (startDate && endDate) {
-      whereConditions.push('(DATE(datetime(t.entered_at, \'+8 hours\')) >= ? AND DATE(datetime(t.entered_at, \'+8 hours\')) <= ?)');
+      whereConditions.push('(' + localDate('t.entered_at') + ' >= ? AND ' + localDate('t.entered_at') + ' <= ?)');
       params.push(startDate, endDate);
     } else if (startDate) {
-      whereConditions.push('DATE(datetime(t.entered_at, \'+8 hours\')) >= ?');
+      whereConditions.push(localDate('t.entered_at') + ' >= ?');
       params.push(startDate);
     } else if (endDate) {
-      whereConditions.push('DATE(datetime(t.entered_at, \'+8 hours\')) <= ?');
+      whereConditions.push(localDate('t.entered_at') + ' <= ?');
       params.push(endDate);
     }
     if (leaveStartDate && leaveEndDate) {
-      whereConditions.push('t.left_at IS NOT NULL AND DATE(datetime(t.left_at, \'+8 hours\')) >= ? AND DATE(datetime(t.left_at, \'+8 hours\')) <= ?');
+      whereConditions.push('t.left_at IS NOT NULL AND ' + localDate('t.left_at') + ' >= ? AND ' + localDate('t.left_at') + ' <= ?');
       params.push(leaveStartDate, leaveEndDate);
     } else if (leaveStartDate) {
-      whereConditions.push('t.left_at IS NOT NULL AND DATE(datetime(t.left_at, \'+8 hours\')) >= ?');
+      whereConditions.push('t.left_at IS NOT NULL AND ' + localDate('t.left_at') + ' >= ?');
       params.push(leaveStartDate);
     } else if (leaveEndDate) {
-      whereConditions.push('t.left_at IS NOT NULL AND DATE(datetime(t.left_at, \'+8 hours\')) <= ?');
+      whereConditions.push('t.left_at IS NOT NULL AND ' + localDate('t.left_at') + ' <= ?');
       params.push(leaveEndDate);
     }
     if (stage) {
@@ -223,29 +272,11 @@ class CandidateStageTimelineService {
     const dataParams = [...params, parseInt(pageSize), (page - 1) * pageSize];
     const [rows] = await sequelize.query(dataSql, { replacements: dataParams });
 
-    const stageNames = {
-      candidate_entry: '候选录入',
-      exam_declare: '机考申报',
-      exam_complete: '机考完成',
-      test_declare: '韧测申报',
-      test_complete: '韧测完成',
-      recommend_interview: '推荐面试',
-      qualification_interview: '资面安排',
-      tech_interview_1: '技术面试(一)',
-      tech_interview_2: '技术面试(二)',
-      manager_interview: '主管面试',
-      approval: '租用审批',
-      offer: 'Offer',
-      pending_onboarding: '待入职',
-      entry: '入职',
-      leave: '离职'
-    };
-
     const records = rows.map(json => ({
       candidateId: json.candidate_id,
       candidateName: json.candidate_name || '未知',
       stage: json.stage,
-      stageName: stageNames[json.stage] || json.stage,
+      stageName: STAGE_NAMES[json.stage] || json.stage,
       enteredAt: json.entered_at,
       leftAt: json.left_at,
       durationHours: json.duration_hours,
@@ -285,24 +316,6 @@ class CandidateStageTimelineService {
       attributes: ['stage', 'durationHours']
     });
 
-    const stageNames = {
-      candidate_entry: '候选录入',
-      exam_declare: '机考申报',
-      exam_complete: '机考完成',
-      test_declare: '韧测申报',
-      test_complete: '韧测完成',
-      recommend_interview: '推荐面试',
-      qualification_interview: '资面安排',
-      tech_interview_1: '技术面试(一)',
-      tech_interview_2: '技术面试(二)',
-      manager_interview: '主管面试',
-      approval: '租用审批',
-      offer: 'Offer',
-      pending_onboarding: '待入职',
-      entry: '入职',
-      leave: '离职'
-    };
-
     const byStage = {};
     for (const row of allRows) {
       if (!byStage[row.stage]) {
@@ -326,7 +339,7 @@ class CandidateStageTimelineService {
       const avg = hours.reduce((s, x) => s + x, 0) / hours.length;
       aggregations.push({
         stage: stageKey,
-        stageName: stageNames[stageKey] || stageKey,
+        stageName: STAGE_NAMES[stageKey] || stageKey,
         avgHours: Math.round(avg * 100) / 100,
         avgDays: Math.round((avg / 24) * 100) / 100,
         p50Hours: Math.round(this.calculatePercentiles(hours, 50) * 100) / 100,
@@ -343,12 +356,13 @@ class CandidateStageTimelineService {
   }
 
   static async getCandidateTotalDurations() {
+    const dayDiffExpr = diffDaysNowMinusDate('t.entered_at');
     const sql = `
       SELECT 
         t.candidate_id,
         c.name AS candidate_name,
         cs.current_stage,
-        (julianday('now') - julianday(t.entered_at)) AS total_days_raw,
+        (${dayDiffExpr}) AS total_days_raw,
         t.entered_at AS entry_entered_at
       FROM candidate_stage_timeline t
       INNER JOIN candidate c ON t.candidate_id = c.id
@@ -358,36 +372,19 @@ class CandidateStageTimelineService {
     `;
     const [results] = await sequelize.query(sql);
 
-    const stageNames = {
-      candidate_entry: '候选录入',
-      exam_declare: '机考申报',
-      exam_complete: '机考完成',
-      test_declare: '韧测申报',
-      test_complete: '韧测完成',
-      recommend_interview: '推荐面试',
-      qualification_interview: '资面安排',
-      tech_interview_1: '技术面试(一)',
-      tech_interview_2: '技术面试(二)',
-      manager_interview: '主管面试',
-      approval: '租用审批',
-      offer: 'Offer',
-      pending_onboarding: '待入职',
-      entry: '入职',
-      leave: '离职'
-    };
-
-    return results.map(r => {
+    const records = results.map(r => {
       const entryDate = new Date(r.entry_entered_at);
       const diffDays = Math.round(parseFloat(r.total_days_raw) * 10) / 10;
       return {
         candidateId: r.candidate_id,
         candidateName: r.candidate_name || '未知',
         currentStage: r.current_stage,
-        currentStageName: stageNames[r.current_stage] || r.current_stage || '未知',
+        currentStageName: STAGE_NAMES[r.current_stage] || r.current_stage || '未知',
         totalDays: diffDays,
         candidateEntryDate: entryDate
       };
     }).sort((a, b) => b.totalDays - a.totalDays);
+    return { records };
   }
 
   static async getStageTrend({ periodDays, startDate, endDate }) {
@@ -405,25 +402,29 @@ class CandidateStageTimelineService {
       endStr = this.toLocalDateString(end);
     }
 
+    const stageListLiteral = STAGE_ORDER.map(s => `'${s}'`).join(',');
+    const allStagesCte = STAGE_ORDER.map(s => `SELECT '${s}' AS stage`).join(' UNION ALL ');
+
     const sql = `
 WITH RECURSIVE dates(date) AS (
     SELECT '${startStr}'
     UNION ALL
-    SELECT date(date, '+1 day') FROM dates WHERE date < '${endStr}'
+    SELECT ${dateAdd1Day('date')} FROM dates WHERE date < '${endStr}'
 ),
 all_stages AS (
-    SELECT DISTINCT stage FROM candidate_stage_timeline WHERE stage IS NOT NULL
+    ${allStagesCte}
 ),
 daily_completion AS (
     SELECT 
-        DATE(datetime(t.left_at, '+8 hours')) as completion_date,
+        ${localDate('t.left_at')} as completion_date,
         t.stage,
         COUNT(DISTINCT t.candidate_id) as candidate_count,
         AVG(t.duration_hours) as avg_hours
     FROM candidate_stage_timeline t
     WHERE t.duration_hours IS NOT NULL
-      AND DATE(datetime(t.left_at, '+8 hours')) >= '${startStr}'
-      AND DATE(datetime(t.left_at, '+8 hours')) <= '${endStr}'
+      AND ${localDate('t.left_at')} >= '${startStr}'
+      AND ${localDate('t.left_at')} <= '${endStr}'
+      AND t.stage IN (${stageListLiteral})
     GROUP BY completion_date, stage
 )
 SELECT 
@@ -438,44 +439,22 @@ LEFT JOIN daily_completion dc
    AND dc.stage = s.stage
 ORDER BY d.date ASC, s.stage ASC
     `;
-    const [rows] = await sequelize.query(sql);
+    const [rows] = await executeReportQuery(sql);
     
-    const stageNames = {
-      candidate_entry: '候选录入',
-      exam_declare: '机考申报',
-      exam_complete: '机考完成',
-      test_declare: '韧测申报',
-      test_complete: '韧测完成',
-      recommend_interview: '推荐面试',
-      qualification_interview: '资面安排',
-      tech_interview_1: '技术面试(一)',
-      tech_interview_2: '技术面试(二)',
-      manager_interview: '主管面试',
-      approval: '租用审批',
-      offer: 'Offer',
-      pending_onboarding: '待入职',
-      entry: '入职',
-      leave: '离职'
-    };
-
     const datesSet = new Set();
     const dataMap = {};
     for (const r of rows) {
       const d = String(r.trend_date).split('T')[0];
       datesSet.add(d);
-      const sname = stageNames[r.stage] || r.stage;
+      const sname = STAGE_NAMES[r.stage] || r.stage;
       if (!dataMap[sname]) dataMap[sname] = {};
       dataMap[sname][d] = Math.round((parseFloat(r.avg_hours) / 24) * 100) / 100;
     }
     const dates = Array.from(datesSet).sort();
     
-    const stageOrder = ['candidate_entry', 'exam_declare', 'exam_complete', 'test_declare', 'test_complete',
-                        'recommend_interview', 'qualification_interview', 'tech_interview_1', 'tech_interview_2',
-                        'manager_interview', 'approval', 'offer', 'pending_onboarding', 'entry', 'leave'];
-    
     const series = [];
-    for (const stageKey of stageOrder) {
-      const stageName = stageNames[stageKey];
+    for (const stageKey of STAGE_ORDER) {
+      const stageName = STAGE_NAMES[stageKey];
       if (stageName && dataMap[stageName]) {
         const data = [];
         for (const d of dates) {
@@ -502,14 +481,21 @@ ORDER BY d.date ASC, s.stage ASC
       endStr = this.toLocalDateString(end);
     }
 
-    const sql = `
+    const stageListLiteral = STAGE_ORDER.map(s => `'${s}'`).join(',');
+    const allStagesSqliteCte = STAGE_ORDER
+      .map((s, i) => `SELECT '${s}' AS stage`)
+      .join(' UNION ALL ');
+
+    let sql;
+    if (isSQLite) {
+      sql = `
 WITH RECURSIVE dates(date) AS (
     SELECT '${startStr}'
     UNION ALL
     SELECT date(date, '+1 day') FROM dates WHERE date < '${endStr}'
 ),
 all_stages AS (
-    SELECT DISTINCT stage FROM candidate_stage_timeline WHERE stage IS NOT NULL
+    ${allStagesSqliteCte}
 ),
 daily_stats AS (
     WITH date_stage_candidates AS (
@@ -567,45 +553,88 @@ LEFT JOIN daily_stats ds
     ON ds.trend_date = d.date 
    AND ds.stage = s.stage
 ORDER BY d.date ASC, s.stage ASC
-    `;
-    const [rows] = await sequelize.query(sql);
-
-    const stageNames = {
-      candidate_entry: '候选录入',
-      exam_declare: '机考申报',
-      exam_complete: '机考完成',
-      test_declare: '韧测申报',
-      test_complete: '韧测完成',
-      recommend_interview: '推荐面试',
-      qualification_interview: '资面安排',
-      tech_interview_1: '技术面试(一)',
-      tech_interview_2: '技术面试(二)',
-      manager_interview: '主管面试',
-      approval: '租用审批',
-      offer: 'Offer',
-      pending_onboarding: '待入职',
-      entry: '入职',
-      leave: '离职'
-    };
+      `;
+    } else {
+      sql = `
+WITH RECURSIVE dates(date) AS (
+    SELECT '${startStr}'
+    UNION ALL
+    SELECT DATE_ADD(date, INTERVAL 1 DAY) FROM dates WHERE date < '${endStr}'
+),
+all_stages AS (
+    ${allStagesSqliteCte}
+),
+daily_stats AS (
+    WITH date_stage_candidates AS (
+        SELECT 
+            d.date as trend_date,
+            s.stage,
+            t.candidate_id,
+            entry.entered_at as entry_entered_at,
+            t.entered_at as stage_entered_at,
+            t.left_at as stage_left_at
+        FROM dates d
+        CROSS JOIN all_stages s
+        INNER JOIN candidate_stage_timeline t 
+            ON t.stage = s.stage
+            AND (
+                 DATE(CONVERT_TZ(t.left_at, '+00:00', '+08:00')) = d.date 
+                 OR 
+                 (t.left_at IS NULL AND DATE(CONVERT_TZ(t.entered_at, '+00:00', '+08:00')) <= d.date)
+                 OR
+                 (DATE(CONVERT_TZ(t.entered_at, '+00:00', '+08:00')) <= d.date AND d.date < DATE(CONVERT_TZ(t.left_at, '+00:00', '+08:00')))
+            )
+        INNER JOIN candidate c ON t.candidate_id = c.id
+        INNER JOIN candidate_stage_timeline entry 
+            ON entry.candidate_id = t.candidate_id 
+            AND entry.stage = 'candidate_entry'
+            AND d.date >= DATE(CONVERT_TZ(entry.entered_at, '+00:00', '+08:00'))
+    )
+    SELECT 
+        trend_date,
+        stage,
+        AVG(
+            TIMESTAMPDIFF(HOUR, entry_entered_at,
+                CASE
+                  WHEN stage_left_at IS NULL THEN IF(DATE(CONVERT_TZ(NOW(), '+00:00', '+08:00')) = trend_date, NOW(), DATE_SUB(DATE_ADD(trend_date, INTERVAL 1 DAY), INTERVAL 1 SECOND))
+                  WHEN DATE(CONVERT_TZ(stage_left_at, '+00:00', '+08:00')) = trend_date THEN stage_left_at
+                  WHEN DATE(CONVERT_TZ(stage_entered_at, '+00:00', '+08:00')) <= trend_date AND trend_date < DATE(CONVERT_TZ(stage_left_at, '+00:00', '+08:00')) 
+                    THEN IF(DATE(CONVERT_TZ(NOW(), '+00:00', '+08:00')) = trend_date, NOW(), DATE_SUB(DATE_ADD(trend_date, INTERVAL 1 DAY), INTERVAL 1 SECOND))
+                  ELSE IF(DATE(CONVERT_TZ(NOW(), '+00:00', '+08:00')) = trend_date, NOW(), DATE_SUB(DATE_ADD(trend_date, INTERVAL 1 DAY), INTERVAL 1 SECOND))
+                END
+            ) / 24.0
+        ) as avg_total_days
+    FROM date_stage_candidates
+    GROUP BY trend_date, stage
+)
+SELECT 
+    d.date as trend_date,
+    s.stage,
+    COALESCE(ds.avg_total_days, 0) as avg_total_days
+FROM dates d
+CROSS JOIN all_stages s
+LEFT JOIN daily_stats ds 
+    ON ds.trend_date = d.date 
+   AND ds.stage = s.stage
+ORDER BY d.date ASC, s.stage ASC
+      `;
+    }
+    const [rows] = await executeReportQuery(sql);
 
     const datesSet = new Set();
     const dataMap = {};
     for (const r of rows) {
       const d = String(r.trend_date).split('T')[0];
       datesSet.add(d);
-      const sname = stageNames[r.stage] || r.stage;
+      const sname = STAGE_NAMES[r.stage] || r.stage;
       if (!dataMap[sname]) dataMap[sname] = {};
       dataMap[sname][d] = Math.round(parseFloat(r.avg_total_days) * 100) / 100;
     }
     const dates = Array.from(datesSet).sort();
     
-    const stageOrder = ['candidate_entry', 'exam_declare', 'exam_complete', 'test_declare', 'test_complete',
-                        'recommend_interview', 'qualification_interview', 'tech_interview_1', 'tech_interview_2',
-                        'manager_interview', 'approval', 'offer', 'pending_onboarding', 'entry', 'leave'];
-    
     const series = [];
-    for (const stageKey of stageOrder) {
-      const stageName = stageNames[stageKey];
+    for (const stageKey of STAGE_ORDER) {
+      const stageName = STAGE_NAMES[stageKey];
       if (stageName && dataMap[stageName]) {
         const data = [];
         for (const d of dates) {
@@ -619,3 +648,5 @@ ORDER BY d.date ASC, s.stage ASC
 }
 
 module.exports = CandidateStageTimelineService;
+module.exports.STAGE_NAMES = STAGE_NAMES;
+module.exports.STAGE_ORDER = STAGE_ORDER;

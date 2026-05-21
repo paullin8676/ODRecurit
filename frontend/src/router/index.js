@@ -84,7 +84,7 @@ const routes = [
         path: 'statistics',
         name: 'Statistics',
         component: () => import('../views/Statistics.vue'),
-        meta: { permission: 'menu_statistics' }
+        meta: { permission: 'menu_statistics_data' }
       },
       {
         path: 'duration-analysis',

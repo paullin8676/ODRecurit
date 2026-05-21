@@ -1,17 +1,32 @@
 -- ===========================================
 -- 数据库 Schema
--- 版本: 2.2
--- 日期: 2026-05-17
+-- 版本: 2.3
+-- 日期: 2026-05-20
 -- ===========================================
 
 -- 更新说明:
--- 1. 版本同步更新与当前代码逻辑保持一致
--- 2. 确认 candidate_stage_timeline 表结构与模型定义同步
--- 3. 所有索引与外键约束与 Sequelize 模型定义保持一致
+-- v2.3 更新内容:
+-- 1. 双数据库兼容: SQLite 语法 + MariaDB 兼容说明 (sql_mode=ANSI, AUTO_INCREMENT代替AUTOINCREMENT)
+-- 2. 覆盖索引同步: CandidateStageTimeline 8个索引完整定义 (idx_cst_candidate_include等)
+-- 3. 迁移脚本: migrations/ 目录配套提供
+--    - MARIADB_MIGRATION_GUIDE.md 完整迁移指南
+--    - migrate_sqlite_to_mariadb.js 数据迁移脚本
+--    - add_cst_covering_indexes.js 性能优化脚本
 -- 历史更新:
+-- - v2.2: 确认 candidate_stage_timeline 表结构与模型定义同步
 -- - v2.1: 用户表(User)已移除role字段，改为通过UserRole关联表实现多对多角色关系
 -- - v2.1: 添加机考试卷相关权限: btn_exam_paper_create, btn_exam_paper_edit, btn_exam_paper_delete
 -- - v2.1: 更新菜单名称: 业务线管理 -> 业务配置, 试卷管理 -> 机考配置
+
+-- ===========================================
+-- MariaDB 兼容性提示:
+-- ===========================================
+-- 1. SQLite AUTOINCREMENT -> MariaDB AUTO_INCREMENT
+-- 2. SQLite TEXT -> MariaDB TEXT / LONGTEXT (大字段)
+-- 3. SQLite CHECK 约束 -> MariaDB 原生支持 (10.2+)
+-- 4. 字符串字面量: 标准 ANSI 单引号
+-- 5. migrations/docker-compose.mariadb.yml 可一键启动服务
+-- ===========================================
 
 -- ===========================================
 -- 用户表 User
@@ -465,4 +480,15 @@ CREATE TABLE IF NOT EXISTS candidate_stage_timeline (
 -- 索引加速筛选与聚合
 CREATE INDEX IF NOT EXISTS idx_cst_stage ON candidate_stage_timeline(stage);
 CREATE INDEX IF NOT EXISTS idx_cst_entered_at ON candidate_stage_timeline(entered_at);
+
+-- 覆盖索引: 加速按 stage + entered_at 范围查询和聚合统计
+CREATE INDEX IF NOT EXISTS idx_cst_stage_entered ON candidate_stage_timeline(stage, entered_at);
+CREATE INDEX IF NOT EXISTS idx_cst_stage_duration ON candidate_stage_timeline(stage, duration_hours);
+
+-- 覆盖索引: 加速日期范围 + 阶段过滤 + duration聚合
+CREATE INDEX IF NOT EXISTS idx_cst_entered_left_duration ON candidate_stage_timeline(entered_at, left_at, duration_hours, stage);
+
+-- 覆盖索引: 加速候选人阶段唯一查找和JOIN
+CREATE INDEX IF NOT EXISTS idx_cst_candidate_stage ON candidate_stage_timeline(candidate_id, stage);
+CREATE INDEX IF NOT EXISTS idx_cst_candidate_include ON candidate_stage_timeline(candidate_id, stage, entered_at, left_at, duration_hours);
 -- ===========================================

@@ -155,9 +155,16 @@ const toLocalDateString = (d) => {
 
 const formatDate = (d) => {
   if (!d) return '-'
-  let str = String(d)
-  if (!str.includes('+')) str += ' +00:00'
-  const dt = new Date(str)
+  let dt
+  if (d instanceof Date) {
+    dt = d
+  } else {
+    let str = String(d)
+    if (!str.includes('+') && !str.endsWith('Z') && !str.includes('T')) {
+      str += ' +00:00'
+    }
+    dt = new Date(str)
+  }
   const Y = dt.getFullYear()
   const M = pad(dt.getMonth() + 1)
   const D = pad(dt.getDate())

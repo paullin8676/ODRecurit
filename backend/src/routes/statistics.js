@@ -93,7 +93,30 @@ router.get('/process-efficiency', authenticate, async (req, res, next) => {
 
     const candidates = await Candidate.findAll({
       where,
-      attributes: ['id', 'createdAt']
+      attributes: ['id', 'createdAt'],
+      include: [
+        {
+          model: Exam,
+          attributes: ['examDate', 'examCompleteDate'],
+          required: false
+        },
+        {
+          model: Interview,
+          attributes: ['id'],
+          required: false,
+          include: [{
+            model: InterviewRound,
+            as: 'rounds',
+            attributes: ['stageCode', 'scheduledDate'],
+            required: false
+          }]
+        },
+        {
+          model: Employee,
+          attributes: ['entryDate'],
+          required: false
+        }
+      ]
     });
 
     const stats = {
@@ -105,12 +128,10 @@ router.get('/process-efficiency', authenticate, async (req, res, next) => {
     };
 
     for (const candidate of candidates) {
-      const candidateId = candidate.id;
-
-      const exam = await Exam.findOne({ where: { candidateId } });
-      const test = await Test.findOne({ where: { candidateId } });
-      const interview = await Interview.findOne({ where: { candidateId } });
-      const interviewRounds = interview ? await InterviewRound.findAll({ where: { interviewId: interview.id }, order: [['stageIndex', 'ASC']] }) : [];
+      const exam = candidate.Exam;
+      const interview = candidate.Interview?.[0];
+      const interviewRounds = interview?.rounds || [];
+      const employee = candidate.Employee?.[0];
 
       if (exam?.examDate && candidate.createdAt) {
         stats.candidateToExam.push((new Date(exam.examDate) - new Date(candidate.createdAt)) / (1000 * 60 * 60 * 24));
@@ -127,7 +148,6 @@ router.get('/process-efficiency', authenticate, async (req, res, next) => {
         stats.recommendToQualification.push((new Date(qualificationInterviewRound.scheduledDate) - new Date(recommendInterviewRound.scheduledDate)) / (1000 * 60 * 60 * 24));
       }
 
-      const employee = await Employee.findOne({ where: { candidateId } });
       if (employee?.entryDate && recommendInterviewRound?.scheduledDate) {
         stats.interviewStageTotal.push((new Date(employee.entryDate) - new Date(recommendInterviewRound.scheduledDate)) / (1000 * 60 * 60 * 24));
       }
@@ -226,8 +246,12 @@ router.get('/stage-duration-agg', authenticate, async (req, res, next) => {
 
 router.get('/candidate-total-durations', authenticate, async (req, res, next) => {
   try {
-    const result = await CandidateStageTimelineService.getCandidateTotalDurations();
-    res.json({ records: result });
+    const { page = 1, pageSize = 50 } = req.query;
+    const result = await CandidateStageTimelineService.getCandidateTotalDurations({
+      page: parseInt(page),
+      pageSize: parseInt(pageSize)
+    });
+    res.json(result);
   } catch (error) {
     next(error);
   }

@@ -1,11 +1,12 @@
 # OD-Recruit 部署指南
-> 版本: 1.1  
-> 日期: 2026-05-17
+> 版本: 1.2  
+> 日期: 2026-05-20
 
 ## 版本历史
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| 1.2 | 2026-05-20 | **双数据库部署支持**<br>SQLite/MariaDB 双数据库切换配置<br>数据库环境变量配置说明<br>新增服务健康检查与端口验证命令<br>进程占用一键清理脚本 |
 | 1.1 | 2026-05-17 | 与项目 v3.2 版本同步更新<br>确认前后端启动命令与 package.json 配置一致 |
 | 1.0 | 2026-05-01 | 初始部署指南版本 |
 
@@ -93,9 +94,80 @@ cd recruitment-system
    - 将 `dist` 目录下的文件部署到静态文件服务器
    - 可以使用 Nginx、Apache 等服务器
 
-### 2.4 数据库配置
+### 2.4 数据库配置（双数据库支持）
 
-本系统使用 SQLite 数据库，无需额外配置。数据库文件会在系统启动时自动创建。
+#### 选项 A：SQLite（开发/演示）
+无需额外配置，数据库文件自动创建：
+```bash
+# backend/.env
+DB_DIALECT=sqlite
+DB_PATH=/absolute/path/to/backend/database.sqlite
+MYSQL_ENABLED=false
+```
+数据库文件位置：`backend/database.sqlite`
+
+---
+
+#### 选项 B：MariaDB 10.5+（生产环境，推荐）
+**要求：** 已安装 MariaDB 服务，创建 `recruit` 用户 + `recruit_db` 数据库
+
+```bash
+# backend/.env
+DB_DIALECT=mysql
+MYSQL_ENABLED=true
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=recruit_db
+DB_USER=recruit
+DB_PASSWORD=recruit123
+```
+
+**MariaDB 一键初始化：**
+```sql
+-- 以 root 登录执行
+CREATE USER recruit@localhost IDENTIFIED BY 'recruit123';
+CREATE DATABASE recruit_db DEFAULT CHARACTER SET utf8mb4;
+GRANT ALL ON recruit_db.* TO recruit@localhost;
+FLUSH PRIVILEGES;
+```
+
+---
+
+### 2.5 启动验证（部署后必做）
+
+**1. 端口占用清理（若旧进程存在）**
+```bash
+lsof -ti:5171,5173,3000 | xargs kill -9
+```
+
+**2. 启动服务**
+```bash
+# 后端（端口3000）
+cd backend && npm start
+
+# 前端（新开终端，端口5171）
+cd frontend && npm run dev
+```
+
+**3. 健康检查验证通过再交付**
+```bash
+# 后端健康检查
+curl http://localhost:3000/api/       # HTTP 404 响应正常
+
+# 前端健康检查
+curl -I http://localhost:5171/         # HTTP 200 正常
+
+# 6个统计API端点冒烟测试
+TOKEN=$(curl -s -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}' \
+  | node -e "console.log(JSON.parse(require('fs').readFileSync(0,'utf8')).token)")
+
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:3000/api/statistics/candidate-total-durations" \
+  | node -e "console.log('records count:', JSON.parse(require('fs').readFileSync(0,'utf8')).records.length)"
+# 期望输出: records count: N (14等有值数字)
+```
 
 ## 3. 生产环境部署
 
