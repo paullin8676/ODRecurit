@@ -123,7 +123,7 @@ import { ElMessage } from 'element-plus'
 import { 
   User, UserFilled, Setting, ArrowDown, 
   Odometer, ArrowLeft, ArrowRight, SwitchButton, Key,
-  Briefcase, PieChart, CirclePlus
+  Briefcase, PieChart, CirclePlus, Files
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -202,7 +202,8 @@ const menuConfig = [
       { title: '阶段配置', path: '/stage-config', permission: 'menu_stage_config' },
       { title: '用户管理', path: '/settings/users', permission: 'menu_users' },
       { title: '角色管理', path: '/settings/roles', permission: 'menu_role_management' },
-      { title: '权限管理', path: '/settings/permissions', permission: 'menu_permission_management' }
+      { title: '权限管理', path: '/settings/permissions', permission: 'menu_permission_management' },
+      { title: '数据备份', path: '/settings/backup', permission: 'menu_backup' }
     ]
   }
 ]
