@@ -139,6 +139,8 @@ async function cleanupOldBackups(retentionDays = RETENTION_DAYS) {
 }
 
 async function listBackups(page = 1, pageSize = 20) {
+  page = parseInt(page) || 1;
+  pageSize = parseInt(pageSize) || 20;
   const { count, rows } = await BackupRecord.findAndCountAll({
     order: [['created_at', 'DESC']],
     limit: pageSize,
@@ -146,7 +148,7 @@ async function listBackups(page = 1, pageSize = 20) {
   });
   return { 
     backups: rows, 
-    pagination: { page: parseInt(page), pageSize: parseInt(pageSize), total: count } 
+    pagination: { page, pageSize, total: count } 
   };
 }
 
