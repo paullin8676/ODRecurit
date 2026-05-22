@@ -140,9 +140,9 @@ const fetchConfig = async () => {
   try {
     configLoading.value = true
     const res = await backupApi.getConfig()
-    config.value = res.data
-    if (res.data.scheduleTime) {
-      scheduleTime.value = res.data.scheduleTime
+    config.value = res
+    if (res.scheduleTime) {
+      scheduleTime.value = res.scheduleTime
     }
   } catch (e) {
     console.error(e)
@@ -155,7 +155,7 @@ const fetchBackups = async () => {
   try {
     listLoading.value = true
     const res = await backupApi.getAll({ page: 1, pageSize: 20 })
-    backups.value = res.data.backups || []
+    backups.value = res.backups || []
   } catch (e) {
     console.error(e)
   } finally {
