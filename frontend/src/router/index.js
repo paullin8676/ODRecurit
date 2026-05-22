@@ -109,6 +109,12 @@ const routes = [
         name: 'PermissionManagement',
         component: () => import('../views/PermissionManagement.vue'),
         meta: { permission: 'menu_permission_management' }
+      },
+      {
+        path: 'settings/backup',
+        name: 'BackupManagement',
+        component: () => import('../views/BackupManagement.vue'),
+        meta: { permission: 'menu_backup' }
       }
     ]
   }

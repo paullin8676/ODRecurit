@@ -12,6 +12,7 @@ const Interview = require('./Interview');
 const InterviewRound = require('./InterviewRound');
 const Employee = require('./Employee');
 const StageConfig = require('./StageConfig')(sequelize);
+const BackupRecord = require('./BackupRecord')(sequelize);
 const Role = require('./Role');
 const Permission = require('./Permission');
 const UserRole = require('./UserRole');
@@ -115,6 +116,7 @@ const initPermissions = async () => {
     { code: 'menu_statistics_records', name: '停留明细', type: 'menu', path: '/duration-records', sortOrder: 73 },
     { code: 'menu_role_management', name: '角色管理', type: 'menu', path: '/settings/roles', icon: 'el-icon-key', sortOrder: 14 },
     { code: 'menu_permission_management', name: '权限管理', type: 'menu', path: '/settings/permissions', icon: 'el-icon-lock', sortOrder: 15 },
+    { code: 'menu_backup', name: '数据备份', type: 'menu', path: '/settings/backup', icon: 'el-icon-document-copy', sortOrder: 16 },
     { code: 'btn_candidate_create', name: '创建候选人', type: 'button' },
     { code: 'btn_candidate_edit', name: '编辑候选人', type: 'button' },
     { code: 'btn_candidate_delete', name: '删除候选人', type: 'button' },
@@ -135,7 +137,11 @@ const initPermissions = async () => {
     { code: 'btn_permission_delete', name: '删除权限', type: 'button' },
     { code: 'btn_exam_paper_create', name: '创建试卷', type: 'button' },
     { code: 'btn_exam_paper_edit', name: '编辑试卷', type: 'button' },
-    { code: 'btn_exam_paper_delete', name: '删除试卷', type: 'button' }
+    { code: 'btn_exam_paper_delete', name: '删除试卷', type: 'button' },
+    { code: 'btn_backup_create', name: '立即备份', type: 'button' },
+    { code: 'btn_backup_delete', name: '删除备份', type: 'button' },
+    { code: 'btn_backup_restore', name: '恢复备份', type: 'button' },
+    { code: 'btn_backup_config', name: '备份配置', type: 'button' }
   ];
 
   for (const perm of permissions) {
@@ -159,7 +165,7 @@ const initRolePermissions = async () => {
   const supervisorPerms = [...consultantPerms, 'btn_candidate_delete'];
   const managerPerms = [...supervisorPerms, 'menu_users', 'menu_business_lines', 'menu_exam_papers', 'menu_stage_config', 'btn_user_create', 'btn_user_edit', 'btn_business_line_create', 'btn_business_line_edit', 'btn_exam_paper_create', 'btn_exam_paper_edit', 'btn_exam_paper_delete'];
   const directorPerms = [...managerPerms, 'btn_user_delete', 'btn_business_line_delete'];
-  const adminPerms = ['menu_dashboard', 'menu_candidates', 'menu_exam', 'menu_test', 'menu_interview', 'menu_employee', 'menu_users', 'menu_business_lines', 'menu_exam_papers', 'menu_stage_config', 'menu_statistics', 'menu_role_management', 'menu_permission_management', 'btn_candidate_create', 'btn_candidate_edit', 'btn_candidate_delete', 'btn_candidate_advance', 'btn_candidate_push_interview', 'btn_user_create', 'btn_user_edit', 'btn_user_delete', 'btn_business_line_create', 'btn_business_line_edit', 'btn_business_line_delete', 'btn_role_create', 'btn_role_edit', 'btn_role_delete', 'btn_permission_assign', 'btn_permission_create', 'btn_permission_edit', 'btn_permission_delete', 'btn_exam_paper_create', 'btn_exam_paper_edit', 'btn_exam_paper_delete'];
+  const adminPerms = ['menu_dashboard', 'menu_candidates', 'menu_exam', 'menu_test', 'menu_interview', 'menu_employee', 'menu_users', 'menu_business_lines', 'menu_exam_papers', 'menu_stage_config', 'menu_statistics', 'menu_role_management', 'menu_permission_management', 'menu_backup', 'btn_candidate_create', 'btn_candidate_edit', 'btn_candidate_delete', 'btn_candidate_advance', 'btn_candidate_push_interview', 'btn_user_create', 'btn_user_edit', 'btn_user_delete', 'btn_business_line_create', 'btn_business_line_edit', 'btn_business_line_delete', 'btn_role_create', 'btn_role_edit', 'btn_role_delete', 'btn_permission_assign', 'btn_permission_create', 'btn_permission_edit', 'btn_permission_delete', 'btn_exam_paper_create', 'btn_exam_paper_edit', 'btn_exam_paper_delete', 'btn_backup_create', 'btn_backup_delete', 'btn_backup_restore', 'btn_backup_config'];
 
   await assignPermissionsToRole(consultantRole, consultantPerms);
   await assignPermissionsToRole(supervisorRole, supervisorPerms);
@@ -344,6 +350,7 @@ module.exports = {
   InterviewRound,
   Employee,
   StageConfig,
+  BackupRecord,
   Role,
   Permission,
   UserRole,

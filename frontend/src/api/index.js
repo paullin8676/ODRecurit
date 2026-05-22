@@ -44,6 +44,15 @@ export const examPaperApi = {
   delete: (id) => api.delete(`/exam-papers/${id}`)
 }
 
+export const backupApi = {
+  getAll: (params) => api.get('/backup', { params }),
+  getConfig: () => api.get('/backup/config'),
+  updateConfig: (data) => api.put('/backup/config', data),
+  createBackup: () => api.post('/backup/create'),
+  deleteBackup: (id) => api.delete(`/backup/${id}`),
+  restoreBackup: (id) => api.post(`/backup/${id}/restore`)
+}
+
 export const candidateApi = {
   getAll: createGetAllWithStages('/candidates'),
   getById: (id) => api.get(`/candidates/${id}`),

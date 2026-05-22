@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { initDatabase } = require('./models');
+const { initBackupSchedule } = require('./services/BackupService');
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/user');
 const businessLineRoutes = require('./routes/businessLine');
@@ -13,6 +14,7 @@ const testRoutes = require('./routes/test');
 const interviewRoutes = require('./routes/interview');
 const statisticsRoutes = require('./routes/statistics');
 const stageConfigRoutes = require('./routes/stageConfig');
+const backupRoutes = require('./routes/backup');
 const roleRoutes = require('./routes/role');
 const permissionRoutes = require('./routes/permission');
 const userRoleRoutes = require('./routes/userRole');
@@ -36,6 +38,7 @@ app.use('/api/tests', testRoutes);
 app.use('/api/interviews', interviewRoutes);
 app.use('/api/statistics', statisticsRoutes);
 app.use('/api/stage-configs', stageConfigRoutes);
+app.use('/api/backup', backupRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/permissions', permissionRoutes);
 app.use('/api/user-roles', userRoleRoutes);
@@ -54,6 +57,7 @@ app.use((err, req, res, next) => {
 const startServer = async () => {
   try {
     await initDatabase();
+    initBackupSchedule();
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
     });

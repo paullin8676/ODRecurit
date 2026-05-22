@@ -1,10 +1,14 @@
 -- ===========================================
 -- 数据库 Schema
--- 版本: 2.3
--- 日期: 2026-05-20
+-- 版本: 2.4
+-- 日期: 2026-05-22
 -- ===========================================
 
 -- 更新说明:
+-- v2.4 更新内容:
+-- 1. 备份功能: 新增 backup_records 表存储手动/定时备份记录
+-- 2. 权限新增: menu_backup, btn_backup_create, btn_backup_delete, btn_backup_restore, btn_backup_config
+-- 历史更新:
 -- v2.3 更新内容:
 -- 1. 双数据库兼容: SQLite 语法 + MariaDB 兼容说明 (sql_mode=ANSI, AUTO_INCREMENT代替AUTOINCREMENT)
 -- 2. 覆盖索引同步: CandidateStageTimeline 8个索引完整定义 (idx_cst_candidate_include等)
@@ -12,7 +16,6 @@
 --    - MARIADB_MIGRATION_GUIDE.md 完整迁移指南
 --    - migrate_sqlite_to_mariadb.js 数据迁移脚本
 --    - add_cst_covering_indexes.js 性能优化脚本
--- 历史更新:
 -- - v2.2: 确认 candidate_stage_timeline 表结构与模型定义同步
 -- - v2.1: 用户表(User)已移除role字段，改为通过UserRole关联表实现多对多角色关系
 -- - v2.1: 添加机考试卷相关权限: btn_exam_paper_create, btn_exam_paper_edit, btn_exam_paper_delete
@@ -491,4 +494,23 @@ CREATE INDEX IF NOT EXISTS idx_cst_entered_left_duration ON candidate_stage_time
 -- 覆盖索引: 加速候选人阶段唯一查找和JOIN
 CREATE INDEX IF NOT EXISTS idx_cst_candidate_stage ON candidate_stage_timeline(candidate_id, stage);
 CREATE INDEX IF NOT EXISTS idx_cst_candidate_include ON candidate_stage_timeline(candidate_id, stage, entered_at, left_at, duration_hours);
+-- ===========================================
+
+
+-- ===========================================
+-- 备份记录表 backup_records (v2.4 新增)
+-- 系统管理员: 数据备份/恢复功能
+-- ===========================================
+CREATE TABLE IF NOT EXISTS backup_records (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  file_name VARCHAR(255) NOT NULL UNIQUE,
+  file_path VARCHAR(500) NOT NULL,
+  file_size BIGINT,
+  backup_type VARCHAR(32) NOT NULL DEFAULT 'manual',
+  status VARCHAR(32) NOT NULL DEFAULT 'completed',
+  schedule_time VARCHAR(10),
+  error_message TEXT,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 -- ===========================================
